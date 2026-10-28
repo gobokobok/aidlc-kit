@@ -406,3 +406,23 @@ Supersedes "Slash commands share one rules file" above.
 - **Not done:** branch protection is not enabled on `main`, so the required
   checks and code-owner review were demonstrated by the checks passing, not by
   GitHub blocking a merge.
+
+## 2026-10-28: Branch protection on main, with a deploy key for the audit job
+
+- **Decision:** `main` has a ruleset (`protect-main`): pull request required with
+  1 approval and code-owner review, required checks `validate`, `eval`,
+  `approvals_complete` and `tests`, no deletion, no force-push.
+- **Decision:** the audit job pushes `audit/log.jsonl` to `main`. GitHub does not
+  let GitHub Actions bypass rules in a personal repository (only in an
+  organisation), so the audit workflow checks out with the deploy key stored in
+  the secret `AIDLC_AUDIT_KEY` when it exists, and that deploy key is a bypass
+  actor. Without the secret the job pushes as GitHub Actions, which is what an
+  organisation setup uses. A push with the key to the protected branch was
+  tested by hand; the workflow itself has not yet run under protection.
+- **Decision:** repository admins can bypass the ruleset ("always"), so the
+  owner can still push directly. That is convenient while building and weakens
+  the guarantee for the owner; set it to "pull request" to require a PR for
+  everyone.
+- **Rejected:** a personal access token in the workflow (it would act as the
+  owner and carry far more access than the audit job needs); skipping
+  protection (the point is that checks and approvals can block a merge).
