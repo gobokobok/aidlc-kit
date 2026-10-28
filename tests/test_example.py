@@ -18,7 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def example():
-    feature = workspace.list_features(ROOT)[0]
+    features = workspace.list_features(ROOT)
+    if not features:
+        pytest.skip("the worked example has not been recorded in this repository yet")
+    feature = features[0]
     return feature, workspace.artifacts_of(ROOT, feature)
 
 

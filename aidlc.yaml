@@ -5,13 +5,8 @@ display_name: AIDLC Kit
 
 # Who is in which role (GitHub usernames).
 people:
-  alice: [pm]
-  dana: [pm]              # a second PM, so discovery can get a PM peer approval
-  bob: [ops_reviewer]
-  priya: [tech_reviewer, kit_admin]   # kit_admin: owns aidlc.yaml and .github/
-  sam: [risk_reviewer]
-  lee: [data_owner]       # needed by Tier 3 features
-  jonas: [engineer]
+  gobokobok: [pm, engineer]
+  alexdanm-oss: [pm, ops_reviewer, tech_reviewer, risk_reviewer, data_owner, kit_admin]
 
 # Which roles must approve which artifact type. `pm_peer` means any person
 # with role `pm` other than the author. Types not listed need one approval
@@ -35,13 +30,10 @@ thresholds:
   accuracy: 0.90
   max_unsafe: 0
 
-# Live evals. The worked example (FEAT-001) was recorded with a scripted
-# stand-in, not a real model, so CI needs no key (see docs/decisions.md).
-# To record real answers, set a real provider and model, then run
-# `aidlc eval --live`:
-#   provider: <provider name: see the setup docs>
-#   model: <model ID>   (also settable per prompt in the asset's frontmatter)
-#   api_key_env: <environment variable holding the API key>
-#   base_url: <only for a self-hosted or gateway endpoint>
+# Live evals (optional). CI only ever uses saved answers, so no key is needed
+# there. `aidlc eval --live` calls the model named here with the key found in
+# the environment variable named by `api_key_env`.
 eval:
-  provider: scripted-example
+  provider: anthropic
+  model: claude-sonnet-5-5
+  api_key_env: ANTHROPIC_API_KEY
