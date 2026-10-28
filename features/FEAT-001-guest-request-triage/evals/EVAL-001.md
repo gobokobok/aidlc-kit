@@ -4,13 +4,14 @@ type: eval
 feature: FEAT-001
 title: Golden set
 version: 1
-status: in_review
+status: approved
 owner: gobokobok
 parents:
   - {id: AC-001, version: 1}
   - {id: AC-002, version: 1}
   - {id: ASSET-001, version: 1}
-approvals: []
+approvals:
+  - {by: alexdanm-oss, version: 1, at: '2026-10-28T11:54:26Z'}
 updated_at: 2026-10-28T11:41:16Z
 golden_sha256: aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23
 ---

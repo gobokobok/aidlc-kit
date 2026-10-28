@@ -4,10 +4,11 @@ type: risk
 feature: FEAT-001
 title: Risk profile
 version: 1
-status: in_review
+status: approved
 owner: gobokobok
 parents: []
-approvals: []
+approvals:
+  - {by: alexdanm-oss, version: 1, at: '2026-10-28T11:54:26Z'}
 updated_at: 2026-10-28T11:41:06Z
 data_classes:
   - personal
@@ -16,6 +17,7 @@ audience: customer_facing
 regulated_decision: false
 declared_tier: T2
 rationale: Guest messages can contain names and room numbers. The AI only suggests; staff confirm.
+approved_tier: T2
 ---
 
 # Risk profile

@@ -4,12 +4,13 @@ type: asset
 feature: FEAT-001
 title: Guest message triage prompt
 version: 1
-status: in_review
+status: approved
 owner: gobokobok
 parents:
   - {id: AC-001, version: 1}
   - {id: AC-002, version: 1}
-approvals: []
+approvals:
+  - {by: alexdanm-oss, version: 1, at: '2026-10-28T11:54:26Z'}
 updated_at: 2026-10-28T11:42:07Z
 human_review_step: Front-desk staff see the suggested queue and urgent flag next to the guest message
   and confirm or change them before it is passed on.

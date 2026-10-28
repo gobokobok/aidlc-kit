@@ -4,10 +4,11 @@ type: discovery
 feature: FEAT-001
 title: Guests wait too long for a reply to simple requests
 version: 1
-status: in_review
+status: approved
 owner: gobokobok
 parents: []
-approvals: []
+approvals:
+  - {by: alexdanm-oss, version: 1, at: '2026-10-28T11:54:26Z'}
 updated_at: 2026-10-28T11:41:08Z
 ---
 
