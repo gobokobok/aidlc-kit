@@ -4,10 +4,10 @@ Take a feature from discovery to an engineering-ready handoff from your IDE,
 in plain language, without touching Git, with whichever AI assistant you
 already use, or none.
 
-> Work in progress. Build steps 1 to 4 of 8 are done: artifact model,
+> Work in progress. Build steps 1 to 5 of 8 are done: artifact model,
 > validator, risk tiers, reviewer routing, CLI, chat commands for several
-> assistants, review and approval, CODEOWNERS, CI checks, the audit log and
-> golden-set evals.
+> assistants, review and approval, CODEOWNERS, CI checks, the audit log,
+> golden-set evals, the handoff gate and package, and technical plans.
 > Full setup and demo instructions arrive with step 8.
 
 ## Set up a repository
@@ -66,6 +66,8 @@ pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
 | `/change` | `aidlc change <ID>` | Edit an item; reviewed items get a new version |
 | `/eval` | `aidlc golden`, `aidlc eval [--live]` | Save the golden set and test the prompt against the criteria |
 | `/submit` | `aidlc submit` | Send drafts for review and ask the right people |
+| `/handoff` | `aidlc handoff` | Check the hard gate, build the package for engineering, then merge and tag it |
+| `/decompose` | `aidlc decompose` | Engineer: start the technical plan from the package, with tasks tied to criteria |
 | `/approve` | `aidlc approve [ID ...]` | Reviewer: approve what is waiting for your role |
 | `/reject` | `aidlc reject ID --reason ...` | Reviewer: reject and say what must change |
 | `/reviewers` | `aidlc reviewers` | Who still has to approve what |

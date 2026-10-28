@@ -220,6 +220,11 @@ def check_feature(items: list[Artifact], config: Config | None = None) -> list[I
         if a.type == "asset":
             for problem in check_asset_settings(a.extra):
                 err(problem)
+        if a.type == "decomposition":
+            from aidlc import decompose  # local: decompose reads evals, which read artifacts
+
+            for severity, message in decompose.check(a, {x.id for x in items if x.type == "criteria"}):
+                (err if severity == "error" else warn)(message)
 
     feature = items[0].feature if items else ""
     if items and not any(a.type == "risk" for a in items):
@@ -275,6 +280,26 @@ def check_golden(feature_dir: Path, root: Path, items: list[Artifact]) -> list[I
     return issues
 
 
+def check_handoffs(root: Path, config: Config, items: list[Artifact]) -> list[Issue]:
+    """Handoff packages: the frozen files still match their manifest, and a
+    package that is in review or approved for the current content passes the
+    handoff gate (the CI `validate` job runs this on every pull request)."""
+    from aidlc import handoff
+    from aidlc.evals import runner
+
+    issues: list[Issue] = []
+    for h in (a for a in items if a.type == "handoff"):
+        for problem in handoff.verify_bundle(h.path.parent):
+            issues.append(Issue("error", _label(h), problem))
+        group = [a for a in items if a.feature == h.feature]
+        if h.status in ("in_review", "approved") and handoff.is_current(h, group):
+            feature_dir = h.path.parents[2]
+            state = runner.report_state(feature_dir / "evals", group, risk.feature_tier(group, config))
+            for blocker in handoff.gate(config, group, state):
+                issues.append(Issue("error", _label(h), f"handoff gate: {blocker}"))
+    return issues
+
+
 def load_repo(root: Path) -> tuple[list[Artifact], list[Issue]]:
     items: list[Artifact] = []
     issues: list[Issue] = []
@@ -301,6 +326,7 @@ def validate_repo(root: Path) -> Report:
     issues.extend(found)
     for feature_id in sorted({a.feature for a in items}):
         issues.extend(check_feature([a for a in items if a.feature == feature_id], config))
+    issues.extend(check_handoffs(root, config, items))
     return Report(tuple(items), tuple(issues))
 
 

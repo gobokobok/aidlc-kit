@@ -16,12 +16,13 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aidlc import artifacts as art
-from aidlc import assistants, audit, blocks, ci, review, reviewers, risk, workspace
+from aidlc import assistants, audit, blocks, ci, decompose, handoff, review, reviewers, risk, workspace
 from aidlc.artifacts import Artifact, ArtifactError
 from aidlc.config import CONFIG_FILE, Config, find_root, load_config, parse_config
 from aidlc.evals import model as eval_model
 from aidlc.evals import runner
-from aidlc.gitops import MAIN_BRANCH, GitError, GitOps, commit_message, feature_branch
+from aidlc.gitops import (MAIN_BRANCH, GitError, GitOps, commit_message, decompose_branch, feature_branch,
+                          feature_of_branch)
 from aidlc.validate import load_feature, refresh_statuses, validate_repo
 from aidlc.workspace import Feature, WorkspaceError
 
@@ -42,6 +43,7 @@ class Ctx:
     now: datetime
     out: TextIO
     stdin: TextIO
+    verbose: bool = False
 
     def say(self, text: str = "") -> None:
         print(text, file=self.out)
@@ -69,8 +71,8 @@ def resolve_feature(ctx: Ctx, explicit: str | None) -> Feature:
     if explicit:
         return workspace.get_feature(ctx.root, explicit)
     branch = ctx.ops.current_branch() if ctx.ops.is_repo() else ""
-    if branch.startswith("feat/"):
-        return workspace.get_feature(ctx.root, branch.removeprefix("feat/"))
+    if feature_of_branch(branch):
+        return workspace.get_feature(ctx.root, feature_of_branch(branch))
     features = workspace.list_features(ctx.root)
     if len(features) == 1:
         return features[0]
@@ -85,6 +87,8 @@ def open_feature(ctx: Ctx, explicit: str | None) -> Feature:
     feature = resolve_feature(ctx, explicit)
     prepare(ctx, feature.id)
     branch = feature_branch(feature.id)
+    if ctx.ops.current_branch() == decompose_branch(feature.id):
+        return feature  # the engineer's technical-plan branch for this feature
     if ctx.ops.current_branch() != branch:
         if ctx.ops.branch_exists(branch):
             ctx.ops.switch(branch)
@@ -93,6 +97,13 @@ def open_feature(ctx: Ctx, explicit: str | None) -> Feature:
         ctx.ops.pull_rebase()
         feature = workspace.get_feature(ctx.root, feature.id)
     return feature
+
+
+def work_branch(ctx: Ctx, feature: Feature) -> str:
+    """The branch review requests for this feature are opened from: the
+    technical-plan branch when on it, otherwise the feature branch."""
+    current = ctx.ops.current_branch()
+    return current if current == decompose_branch(feature.id) else feature_branch(feature.id)
 
 
 def current_user(ctx: Ctx, explicit: str | None = None) -> str:
@@ -149,6 +160,12 @@ def save_commit(ctx: Ctx, feature: Feature, a: Artifact, summary: str) -> None:
 def to_answers(raw: dict[str, Any]) -> risk.Answers:
     return risk.Answers(tuple(raw["data_classes"]), raw["autonomy"], raw["audience"],
                         raw["regulated_decision"])
+
+
+def plan_flags(ctx: Ctx, feature: Feature) -> list[str]:
+    """Technical-plan flags (untraced tasks, uncovered criteria) for the feature."""
+    return [f"{i.where}: {i.message}" for i in validate_repo(ctx.root).warnings
+            if (i.where.startswith(feature.id) or feature.path.name in i.where) and decompose.is_flag(i.message)]
 
 
 def feature_problems(ctx: Ctx, feature: Feature) -> list:
@@ -448,7 +465,7 @@ def sync_reviews(ctx: Ctx, feature: Feature) -> None:
     if not ctx.ops.has_remote():
         return
     try:
-        pr = ctx.ops.pr_for_branch(feature_branch(feature.id))
+        pr = ctx.ops.pr_for_branch(work_branch(ctx, feature))
         if pr is None or pr.state != "OPEN":
             return
         reviews = ctx.ops.pr_reviews(pr.number)
@@ -512,8 +529,23 @@ def cmd_status(ctx: Ctx, args: argparse.Namespace) -> int:
         ctx.say(f"{len(problems)} problem(s) need fixing:")
         for i in problems:
             ctx.say(f"  ✗ {i.where}: {i.message}")
-    ctx.say(workspace.next_step(items, tier, ctx.config, state))
+    for flag in plan_flags(ctx, feature):
+        ctx.say(f"  ! {flag}")
+    ctx.say(next_step_text(ctx, feature, items, tier, state))
     return 0
+
+
+def handed_off(ctx: Ctx, feature: Feature) -> set[str]:
+    if not ctx.ops.is_repo():
+        return set()
+    return handoff.handed_off_ids(feature.id, ctx.ops.tags(f"{feature.id}/handoff-v*"))
+
+
+def next_step_text(ctx: Ctx, feature: Feature, items: list[Artifact], tier, state: str) -> str:
+    text = workspace.next_step(items, tier, ctx.config, state)
+    if text == workspace.ALL_DONE:
+        return handoff.next_step(ctx.config, items, handed_off(ctx, feature)) or text
+    return text
 
 
 EVAL_STATE_WORDS = {
@@ -550,7 +582,7 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
             feature.id, "Submit for review: " + ", ".join(f"{a.id} v{a.version}" for a in submitted)))
     elif not any(a.status == "in_review" for a in items):
         state = runner.report_state(feature.path / "evals", items, tier)
-        ctx.say("There is nothing new to submit. " + workspace.next_step(items, tier, ctx.config, state))
+        ctx.say("There is nothing new to submit. " + next_step_text(ctx, feature, items, tier, state))
         return 0
 
     if not ctx.ops.has_remote():
@@ -559,12 +591,13 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
                 "Ask an engineer to connect it (see README).")
         return 0
     ctx.ops.push()
-    body = review.pr_body(feature, items, ctx.config, tier, plan)
-    pr = ctx.ops.pr_for_branch(feature_branch(feature.id))
+    body = review.pr_body(feature, items, ctx.config, tier, plan, plan_flags(ctx, feature))
+    branch = work_branch(ctx, feature)
+    pr = ctx.ops.pr_for_branch(branch)
     if pr is None or pr.state != "OPEN":
-        pr = ctx.ops.create_pr(review.pr_title(feature), body)
+        pr = ctx.ops.create_pr(review.pr_title(feature, branch), body)
     else:
-        ctx.ops.update_pr(pr.number, review.pr_title(feature), body)
+        ctx.ops.update_pr(pr.number, review.pr_title(feature, branch), body)
     ctx.ops.request_reviewers(pr.number, [r.person for r in plan.requests])
     ctx.say(review.reviewer_message(plan, tier) + f" Review request: {pr.url}")
     ctx.say("Next: wait for approvals; /reviewers shows who still has to approve what.")
@@ -683,6 +716,166 @@ def eval_check(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
+# --- handoff and decomposition ---------------------------------------------
+
+def say_blockers(ctx: Ctx, blockers: list[handoff.Blocker], head: str) -> None:
+    ctx.say(head)
+    for b in blockers:
+        ctx.say(f"  ✗ {b}")
+
+
+def cmd_handoff(ctx: Ctx, args: argparse.Namespace) -> int:
+    feature = open_feature(ctx, args.feature)
+    sync_reviews(ctx, feature)
+    items = workspace.artifacts_of(ctx.root, feature)
+    tier = tier_of(ctx, items)
+    done = handed_off(ctx, feature)
+    state = runner.report_state(feature.path / "evals", items, tier)
+    own = [i for i in feature_problems(ctx, feature) if "handoff gate" not in i.message]
+    content_blockers = handoff.gate(ctx.config, items, state, own)
+    if content_blockers:
+        say_blockers(ctx, content_blockers, "Not ready for handoff yet. What is in the way:")
+        ctx.say("Handoff is the one hard gate: everything approved, nothing out of date, evals passing.")
+        return 1
+
+    package = handoff.open_handoff(items, done)
+    if package is not None and handoff.is_current(package, items):
+        return finish_handoff(ctx, feature, items, package)
+    return build_handoff(ctx, feature, items, tier, package)
+
+
+def build_handoff(ctx: Ctx, feature: Feature, items: list[Artifact], tier, previous: Artifact | None) -> int:
+    package = handoff.build(ctx.root, ctx.config, feature, items, current_user(ctx), ctx.now,
+                            ctx.ops.head_sha(), handed_off(ctx, feature))
+    ctx.ops.commit(["features"], commit_message(feature.id, f"Build handoff package {package.id}",
+                                                package.id, package.version))
+    items = workspace.artifacts_of(ctx.root, feature)
+    plan = review.plan_reviews(ctx.config, items, tier, package.owner)
+    rebuilt = f" (rebuilt as v{package.version})" if previous else ""
+    lead = f"Everything is approved and the evals pass. I built {package.id}{rebuilt} for engineering: "
+    if not ctx.ops.has_remote():
+        ctx.say(lead + "a frozen specification, the prompt, the golden set and the trace. This repository "
+                "is not connected to GitHub, so the reviewers have to accept it with /approve here; "
+                "then run /handoff again.")
+        return 0
+    ctx.ops.push()
+    branch = work_branch(ctx, feature)
+    body = review.pr_body(feature, items, ctx.config, tier, plan, plan_flags(ctx, feature))
+    pr = ctx.ops.pr_for_branch(branch)
+    if pr is None or pr.state != "OPEN":
+        pr = ctx.ops.create_pr(review.pr_title(feature, branch), body)
+    else:
+        ctx.ops.update_pr(pr.number, review.pr_title(feature, branch), body)
+    ctx.ops.request_reviewers(pr.number, [r.person for r in plan.requests])
+    ctx.say(lead + "a frozen specification, the prompt, the golden set and the trace. "
+            + review.reviewer_message(plan, tier) + f" Review request: {pr.url}")
+    ctx.say("Next: once they accept it with /approve, run /handoff again to merge and tag it.")
+    return 0
+
+
+def finish_handoff(ctx: Ctx, feature: Feature, items: list[Artifact], package: Artifact) -> int:
+    """The package is built and current: merge it once its reviewers accept it."""
+    waiting = handoff.package_blockers(ctx.config, package, items)
+    problems = handoff.verify_bundle(package.path.parent)
+    github_problems: list[str] = []
+    branch = work_branch(ctx, feature)
+    pr = ctx.ops.pr_for_branch(branch) if ctx.ops.has_remote() else None
+    if pr is not None and pr.state == "OPEN":
+        result, _ = approvals_result(ctx, pr.number, f"origin/{MAIN_BRANCH}")
+        # Missing roles are already listed above; GitHub adds only what it alone can see.
+        github_problems = [p for p in result.problems if "still needs" not in p]
+    if waiting or problems or github_problems:
+        ctx.say(f"{package.id} is not ready to merge yet:")
+        for b in waiting:
+            ctx.say(f"  ✗ {b}")
+        for text in problems + github_problems:
+            ctx.say(f"  ✗ {text}")
+        return 1
+
+    tag = handoff.tag_name(feature.id, package.id)
+    if tag in ctx.ops.tags(tag):
+        raise WorkspaceError(f"{package.id} has already been handed off as {tag}.")
+    if ctx.ops.has_remote():
+        ctx.ops.push()
+        if pr is None or pr.state != "OPEN":
+            raise WorkspaceError("There is no open review request on GitHub to merge. Run /submit first.")
+        try:
+            ctx.ops.merge_pr(pr.number)
+        except GitError as exc:
+            ctx.say("GitHub would not merge it yet, usually because a required check or approval is still "
+                    f"missing. Look at the review request: {pr.url}")
+            if ctx.verbose and exc.detail:
+                ctx.say(exc.detail)
+            return 1
+        sha = ctx.ops.merge_commit(pr.number)
+        ctx.ops.switch(MAIN_BRANCH)
+        ctx.ops.pull_rebase()
+        sha = sha or ctx.ops.head_sha()
+    else:
+        sha = ctx.ops.squash_merge(branch, f"{feature.id}: {feature.title} ({package.id})")
+    ctx.ops.create_tag(tag, sha, f"{feature.id} handed off as {package.id} v{package.version}")
+    if ctx.ops.has_remote():
+        ctx.ops.push_tag(tag)
+    folder = feature.path.relative_to(ctx.root).as_posix()
+    tidied = ""
+    if ctx.ops.branch_exists(branch) and ctx.ops.branch_matches(branch, MAIN_BRANCH, folder):
+        ctx.ops.delete_branch(branch)
+        tidied = " Further changes start a fresh branch."
+    ctx.say(f"Handed off: {feature.id} is merged and tagged {tag}. Engineering can now run /decompose.{tidied}")
+    return 0
+
+
+def cmd_decompose(ctx: Ctx, args: argparse.Namespace) -> int:
+    feature = resolve_feature(ctx, args.feature)
+    if not ctx.ops.is_repo():
+        raise GitError("This folder is not a Git repository yet. Ask an engineer to set up the kit once.")
+    prepare(ctx, feature.id)
+    ids = sorted(handed_off(ctx, feature), key=handoff.handoff_number)
+    if not ids:
+        raise WorkspaceError(f"{feature.id} has not been handed off yet. Run /handoff first.")
+    latest = ids[-1]
+    branch = decompose_branch(feature.id)
+    if ctx.ops.current_branch() != branch:
+        if ctx.ops.branch_exists(branch):
+            ctx.ops.switch(branch)
+        else:
+            if ctx.ops.current_branch() != MAIN_BRANCH:
+                ctx.ops.switch(MAIN_BRANCH)
+            ctx.ops.pull_rebase()
+            ctx.ops.create_branch(branch, MAIN_BRANCH)
+        ctx.ops.pull_rebase()
+    feature = workspace.get_feature(ctx.root, feature.id)
+    items = workspace.artifacts_of(ctx.root, feature)
+    package = workspace.find_artifact(items, latest)
+    problems = handoff.verify_bundle(package.path.parent)
+    if problems:
+        raise WorkspaceError("The handoff package is damaged: " + "; ".join(problems) + ".")
+    body = read_body(ctx, args.body_file)
+    existing = next((a for a in items if a.type == "decomposition" and any(p.id == latest for p in a.parents)), None)
+    if existing is not None:
+        if body is None and not args.title:
+            ctx.say(f"{existing.id} already plans {latest}. Edit it, or pass new text to replace it. "
+                    + decompose_summary(existing, items))
+            return 0
+        return finish_edit(ctx, feature, workspace.edit_artifact(
+            ctx.root, feature, existing.id, ctx.now, title=args.title, body=body), args.summary)
+    dec = workspace.create_decomposition(ctx.root, feature, latest, current_user(ctx), ctx.now, body)
+    save_commit(ctx, feature, dec, f"Start technical plan for {latest}")
+    ctx.say(f"Started {dec.id} from {latest}: components, interfaces, data, risks and {task_count(dec)} "
+            "starter tasks, each tied to a criterion. Refine it, then /submit to open the review request.")
+    return 0
+
+
+def task_count(dec: Artifact) -> int:
+    return len(decompose.parse_tasks(dec.body)[0])
+
+
+def decompose_summary(dec: Artifact, items: list[Artifact]) -> str:
+    findings = decompose.check(dec, {a.id for a in items if a.type == "criteria"})
+    flags = [m for sev, m in findings]
+    return (f"{task_count(dec)} task(s)." + (" Needs attention: " + "; ".join(flags[:3]) + "." if flags else ""))
+
+
 # --- reviewer commands -----------------------------------------------------
 
 def send_to_github(ctx: Ctx, feature: Feature, approve: bool, body: str) -> str:
@@ -690,7 +883,8 @@ def send_to_github(ctx: Ctx, feature: Feature, approve: bool, body: str) -> str:
     sentence for the reviewer."""
     if not ctx.ops.has_remote():
         return "This repository is not connected to GitHub, so the decision is recorded here only."
-    pr = ctx.ops.pr_for_branch(feature_branch(feature.id))
+    branch = work_branch(ctx, feature)
+    pr = ctx.ops.pr_for_branch(branch)
     if pr is None or pr.state != "OPEN":
         ctx.ops.push()
         return "There is no open review request on GitHub yet, so it is recorded in the files only."
@@ -699,7 +893,8 @@ def send_to_github(ctx: Ctx, feature: Feature, approve: bool, body: str) -> str:
     items = workspace.artifacts_of(ctx.root, feature)
     tier = tier_of(ctx, items)
     plan = review.plan_reviews(ctx.config, items, tier, feature.owner)
-    ctx.ops.update_pr(pr.number, review.pr_title(feature), review.pr_body(feature, items, ctx.config, tier, plan))
+    ctx.ops.update_pr(pr.number, review.pr_title(feature, branch),
+                      review.pr_body(feature, items, ctx.config, tier, plan, plan_flags(ctx, feature)))
     return "It is on the GitHub review request too."
 
 
@@ -800,11 +995,12 @@ def cmd_sync_ci(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_approvals_check(ctx: Ctx, args: argparse.Namespace) -> int:
+def approvals_result(ctx: Ctx, pr: int, base: str) -> tuple[review.CheckResult, list[str]]:
+    """The `approvals_complete` check for a pull request against `base`."""
     ops = ctx.ops
-    base_config = ops.file_at(args.base, CONFIG_FILE)
+    base_config = ops.file_at(base, CONFIG_FILE)
     config = parse_config(base_config)[0] if base_config else ctx.config
-    changed_paths = ops.changed_between(args.base, "HEAD", merge_base=True)
+    changed_paths = ops.changed_between(base, "HEAD", merge_base=True)
     notes = []
     if CONFIG_FILE in changed_paths:
         notes.append(f"This pull request changes {CONFIG_FILE}; the check uses the version on the base branch.")
@@ -825,13 +1021,17 @@ def cmd_approvals_check(ctx: Ctx, args: argparse.Namespace) -> int:
             if rel in changed_paths:
                 changed.append(a)
                 if a.type == "risk":
-                    old = ops.file_at(args.base, rel)
+                    old = ops.file_at(base, rel)
                     try:
                         base_tier[feature_id] = art.parse(old).extra.get("approved_tier") if old else None
                     except ArtifactError:
                         base_tier[feature_id] = None
-    reviews = ops.pr_reviews(args.pr) if changed else []
-    result = review.approvals_check(config, changed, feature_items, reviews, version_at(ctx), base_tier)
+    reviews = ops.pr_reviews(pr) if changed else []
+    return review.approvals_check(config, changed, feature_items, reviews, version_at(ctx), base_tier), notes
+
+
+def cmd_approvals_check(ctx: Ctx, args: argparse.Namespace) -> int:
+    result, notes = approvals_result(ctx, args.pr, args.base)
     for line in result.problems:
         ctx.say(f"  ✗ {line}")
     for line in notes + result.notes:
@@ -949,6 +1149,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--install", default=ci.DEFAULT_INSTALL, help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_init)
 
+    p = sub.add_parser("handoff", help="check the gate, build the package, then merge and tag it")
+    p.add_argument("--feature")
+    p.set_defaults(func=cmd_handoff)
+
+    p = sub.add_parser("decompose", help="engineer: start or edit the technical plan for a handed-off feature")
+    p.add_argument("--feature")
+    p.add_argument("--title")
+    p.add_argument("--body-file", help="the plan as Markdown; '-' reads standard input")
+    p.add_argument("--summary", help="short description of the change, for the history")
+    p.set_defaults(func=cmd_decompose)
+
     p = sub.add_parser("golden", help="save the golden set (test cases) and record it")
     p.add_argument("--feature")
     p.add_argument("--file", help="cases as YAML; '-' reads standard input (default: re-record golden.yaml)")
@@ -1061,7 +1272,7 @@ def main(
     root = find_root(Path(args.root))
     config, _ = load_config(root)
     ctx = Ctx(root, config, ops_factory(root), now or art.utc_now(),
-              out or sys.stdout, stdin or sys.stdin)
+              out or sys.stdout, stdin or sys.stdin, args.verbose)
     try:
         return args.func(ctx, args)
     except (WorkspaceError, GitError, assistants.SetupError, eval_model.EvalError) as exc:

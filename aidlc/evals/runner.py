@@ -109,7 +109,7 @@ def parse_golden(text: str, criteria_ids: set[str] | None = None,
 
 # --- prompts --------------------------------------------------------------------
 
-def _fenced_block(body: str, heading: str) -> str | None:
+def fenced_block(body: str, heading: str) -> str | None:
     m = re.search(rf"^##\s+{heading}\s*$(.*?)(?=^##\s|\Z)", body, re.M | re.S)
     if not m:
         return None
@@ -120,10 +120,10 @@ def _fenced_block(body: str, heading: str) -> str | None:
 def prompt_of(asset: Artifact) -> tuple[str | None, str]:
     """(system prompt, prompt template) from the asset body: the first fenced
     block under `## Prompt`, and optionally under `## System`."""
-    prompt = _fenced_block(asset.body, "Prompt")
+    prompt = fenced_block(asset.body, "Prompt")
     if not prompt or not prompt.strip() or prompt.strip() == "(the prompt goes here)":
         raise EvalError(f"{asset.id} has no prompt yet: put it in a ```text block under '## Prompt'.")
-    return _fenced_block(asset.body, "System"), prompt
+    return fenced_block(asset.body, "System"), prompt
 
 
 def render_prompt(template: str, case_input: Any) -> str:

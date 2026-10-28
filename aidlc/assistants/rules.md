@@ -11,6 +11,8 @@ engineering handoff. When the PM asks for an AIDLC step, by its command name
   and explain the result they paste back.
 - Never edit `status`, `version`, `approvals`, `rejections`, `approved_tier` or
   `declared_tier` in files under `features/` by hand. The tool owns them.
+- Files inside a `handoff/HND-xxx/` folder are frozen once built; never edit
+  them. Rebuilding is `aidlc handoff`.
 - The PM never sees Git. Do not show command output verbatim unless they ask.
   Relay the tool's closing sentences in your own words, in one or two plain
   sentences: what happened and what comes next.

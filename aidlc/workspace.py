@@ -406,6 +406,35 @@ def revise_risk(
     return RiskRevision(before, after, tier_before, risk.effective_tier(after, config), computed, reasons)
 
 
+# --- decomposition -------------------------------------------------------
+
+def create_decomposition(root: Path, feature: Feature, handoff_id: str, owner: str,
+                         now: datetime, body: str | None = None) -> Artifact:
+    """Start the technical plan for a handed-off package, scaffolded from it."""
+    from aidlc import decompose
+
+    items = artifacts_of(root, feature)
+    package = find_artifact(items, handoff_id)
+    manifest = decompose.read_manifest(package.path.parent)
+    by_id = trace.index(items)
+    listed = [by_id[i["id"]] for i in manifest["items"] if i["id"] in by_id]
+    criteria = [a for a in listed if a.type == "criteria"]
+    requirements = [a for a in listed if a.type == "requirement"]
+    from aidlc.evals import runner
+
+    cases, _ = runner.parse_golden((package.path.parent / "golden.yaml").read_text(encoding="utf-8"))
+    new_id = art.next_id("decomposition", used_ids(root, feature, items))
+    a = render("decomposition", id=new_id, feature=feature.id, title=f"Technical plan: {feature.title}",
+               owner=owner, now=now, parents=[{"id": package.id, "version": package.version}],
+               handoff=package.id, components=decompose.components(requirements),
+               tasks_yaml=decompose.tasks_yaml(criteria), cases=len(cases))
+    if body is not None and body.strip():
+        a = replace(a, body="\n" + body.strip("\n") + "\n")
+    a = replace(a, path=feature.path / art.relative_path("decomposition", new_id))
+    art.save(a)
+    return a
+
+
 # --- golden set ----------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -497,6 +526,8 @@ def normalize_hand_edits(root: Path, changed: list[tuple[Path, str | None]], now
 
 # --- state ---------------------------------------------------------------
 
+ALL_DONE = "Everything is approved and the evals pass. Next: /handoff."
+
 EVAL_STEPS = {
     "none": "Run /eval to build the golden set and test the prompt against the criteria.",
     "missing": "Run /eval: the golden set has not been run yet.",
@@ -540,7 +571,7 @@ def next_step(items: list[Artifact], tier: Tier | None, config: Config,
                or (a.status == "approved" and not reviewers.roles_complete(config, a, tier))]
     if waiting:
         return "Waiting for reviewers; run /reviewers to see who still has to approve what."
-    return "Everything is approved and the evals pass. Next: /handoff."
+    return ALL_DONE
 
 
 def sort_key(a: Artifact) -> tuple[int, str]:

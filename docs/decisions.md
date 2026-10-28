@@ -315,3 +315,62 @@ Supersedes "Slash commands share one rules file" above.
   model; live runs (which cost money) need the PM's go-ahead.
 - **Why:** a golden set copied from model output only proves the model agrees
   with itself.
+
+## 2026-10-28: `/handoff` is two passes, and the package is itself reviewed
+
+- **Decision:** the first `/handoff` checks the gate, then builds `handoff/HND-xxx/`
+  (spec.md, risk.md, frozen assets, golden.yaml, eval-report.md, trace.json,
+  manifest.json) and records it as an artifact in review. Routing for `handoff`
+  plus the tier extras (at Tier 2: Tech and Risk) accept it with `/approve`. The
+  second `/handoff` squash-merges and tags.
+- **Rejected:** merging in the same command that builds it (nobody would have
+  seen the package); a separate approval mechanism (the existing one gives
+  roles, GitHub confirmation and audit for free).
+- **Why:** the spec routes `handoff` to a reviewer; the package is the thing
+  engineering will build from, so it is the thing reviewers should accept.
+
+## 2026-10-28: One gate, used by the CLI and by CI
+
+- **Decision:** `handoff.gate` is a pure function returning blockers, each with
+  who can resolve it. `/handoff` runs it with the feature's validation errors;
+  CI `validate` runs it for any package that is in review or approved for
+  the current content. A package for older content is stale and skipped.
+- **Why:** the hard gate cannot be bypassed by editing files or skipping the
+  command, and a PM sees the same wording in the IDE and in the CI log.
+
+## 2026-10-28: The package is frozen by checksums; handed-off state lives in tags
+
+- **Decision:** `manifest.json` records a sha256 for every file in the package
+  except `handoff.md` (whose status changes) and itself; validate fails when a
+  file differs or disappears. Which HND packages were handed off is read from
+  tags `FEAT-001/handoff-v<n>` (local or remote), not from a state file.
+- **Why:** a tag cannot drift from the merge it marks, and there is no second
+  record to keep in sync.
+
+## 2026-10-28: Merge and tidy-up
+
+- **Decision:** `gh pr merge --squash` without `--delete-branch` (the GitHub
+  setting for deleting merged branches does that); the local feature branch is
+  deleted only when its feature folder is identical to `main`'s, so a later
+  change starts from a fresh branch. A tag is annotated and pushed on its own.
+  Without GitHub, the same flow squash-merges locally. If GitHub refuses (a
+  required check or approval is missing), the PM is told to look at the review
+  request and nothing is tagged.
+- **Rejected:** merging with `--admin` or `--auto` (the point is that GitHub's
+  protection still applies).
+
+## 2026-10-28: Technical plan: own branch, flags not blocks, scaffold from the package
+
+- **Decision:** `/decompose` creates `decompose/FEAT-xxx` from `main`, scaffolds
+  `DEC-xxx` from the package (components from requirements, one starter task per
+  criterion, a regression-gate task), and `/submit` opens a PR from that branch.
+  Untraced tasks and uncovered criteria are warnings shown in `/status` and in
+  the review request; unknown criteria are errors. The engineer role is not
+  enforced: anyone can start a plan, and the review decides.
+- **Rejected:** blocking submit on untraced tasks (a reviewer may accept an
+  infrastructure task that maps to no criterion; they should see it flagged, not
+  have it silently dropped).
+- **Open point:** `decomposition` is not in the review routing, so it needs any
+  other person plus the tier's extra reviewers (at Tier 2, the risk reviewer
+  must accept a technical plan). Add `decomposition:` to `review_routing` if
+  that is more than you want.

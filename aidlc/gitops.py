@@ -13,6 +13,7 @@ from pathlib import Path
 
 MAIN_BRANCH = "main"
 FEATURE_BRANCH_PREFIX = "feat/"
+DECOMPOSE_BRANCH_PREFIX = "decompose/"
 REMOTE = "origin"
 
 Runner = Callable[[list[str], Path], subprocess.CompletedProcess]
@@ -65,6 +66,18 @@ def subprocess_runner(args: list[str], cwd: Path) -> subprocess.CompletedProcess
 
 def feature_branch(feature_id: str) -> str:
     return f"{FEATURE_BRANCH_PREFIX}{feature_id}"
+
+
+def decompose_branch(feature_id: str) -> str:
+    return f"{DECOMPOSE_BRANCH_PREFIX}{feature_id}"
+
+
+def feature_of_branch(branch: str) -> str | None:
+    """FEAT-001 from feat/FEAT-001 or decompose/FEAT-001."""
+    for prefix in (FEATURE_BRANCH_PREFIX, DECOMPOSE_BRANCH_PREFIX):
+        if branch.startswith(prefix):
+            return branch.removeprefix(prefix)
+    return None
 
 
 def commit_message(feature_id: str, summary: str, artifact_id: str | None = None,
@@ -275,6 +288,47 @@ class GitOps:
         flag = "--approve" if approve else "--request-changes"
         self._gh("pr", "review", str(number), flag, "--body", body,
                  what="record your review on GitHub")
+
+    def merge_pr(self, number: int) -> None:
+        """Squash-merge. GitHub refuses until required checks and reviews pass."""
+        self._gh("pr", "merge", str(number), "--squash", what="merge the pull request on GitHub")
+
+    def merge_commit(self, number: int) -> str | None:
+        result = self._call(["gh", "pr", "view", str(number), "--json", "mergeCommit,state"], "", check=False)
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        return (data.get("mergeCommit") or {}).get("oid")
+
+    def squash_merge(self, branch: str, message: str, base: str = MAIN_BRANCH) -> str:
+        """Without GitHub: squash `branch` into `base` locally. Returns the commit."""
+        self.switch(base)
+        self._git("merge", "--squash", branch, what=f"combine {branch} into {base}")
+        self._git("commit", "--quiet", "-m", message, what="save the combined work")
+        return self.head_sha()
+
+    def tags(self, pattern: str) -> list[str]:
+        """Tag names matching a glob, local or on the remote."""
+        names = set(self._git("tag", "--list", pattern, what="list tags").split())
+        if self.has_remote():
+            out = self._call(["git", "ls-remote", "--tags", REMOTE, pattern], "", check=False).stdout
+            for line in out.splitlines():
+                ref = line.split("refs/tags/", 1)[-1]
+                names.add(ref.removesuffix("^{}"))
+        return sorted(n for n in names if n)
+
+    def create_tag(self, name: str, ref: str, message: str) -> None:
+        self._git("tag", "-a", name, ref, "-m", message, what=f"tag {name}")
+
+    def push_tag(self, name: str) -> None:
+        self._git("push", "--quiet", REMOTE, f"refs/tags/{name}", what=f"send tag {name} to GitHub")
+
+    def branch_matches(self, branch: str, base: str, path: str) -> bool:
+        """Whether `path` is identical on both branches (nothing would be lost)."""
+        return self._call(["git", "diff", "--quiet", base, branch, "--", path], "", check=False).returncode == 0
+
+    def delete_branch(self, branch: str) -> None:
+        self._git("branch", "-D", branch, what=f"tidy up {branch}")
 
     def request_reviewers(self, number: int, users: Iterable[str]) -> None:
         users = sorted(set(users))

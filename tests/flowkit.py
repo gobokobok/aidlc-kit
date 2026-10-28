@@ -23,6 +23,26 @@ class FakeGh:
         self.calls: list[list[str]] = []
         self.pr: dict | None = None
         self.reviews: list[dict] = []
+        self.refuse_merge = False
+
+    def merge(self, cwd: Path) -> subprocess.CompletedProcess:
+        """Squash-merge the PR branch into main on the remote, like GitHub does,
+        refusing while a required check would fail."""
+        if self.refuse_merge:
+            return subprocess.CompletedProcess([], 1, "", "Pull request is not mergeable: required status check failed")
+        remote = subprocess_runner(["git", "remote", "get-url", "origin"], cwd).stdout.strip()
+        clone = cwd.parent / "merge-clone"
+        subprocess_runner(["rm", "-rf", str(clone)], cwd)
+        for step in (["git", "clone", "-q", remote, str(clone)],
+                     ["git", "merge", "--squash", f"origin/{self.pr['branch']}"],
+                     ["git", "commit", "-q", "-m", f"{self.pr['title']} (#{self.pr['number']})"],
+                     ["git", "push", "-q", "origin", "main"]):
+            result = subprocess_runner(step, cwd if step[1] == "clone" else clone)
+            if result.returncode != 0:
+                return result
+        sha = subprocess_runner(["git", "rev-parse", "HEAD"], clone).stdout.strip()
+        self.pr = {**self.pr, "state": "MERGED", "mergeCommit": {"oid": sha}}
+        return subprocess.CompletedProcess([], 0, "", "")
 
     def add_review(self, login: str, state: str, cwd: Path, body: str = "") -> None:
         """A review as GitHub records it: by an authenticated login, at a commit."""
@@ -37,6 +57,8 @@ class FakeGh:
         ok = lambda out="": subprocess.CompletedProcess(args, 0, out, "")  # noqa: E731
         if args[1:3] == ["api", "user"]:
             return ok(self.user + "\n")
+        if args[1:3] == ["pr", "merge"]:
+            return self.merge(cwd)
         if args[1:3] == ["pr", "view"]:
             if self.pr is None:
                 return subprocess.CompletedProcess(args, 1, "", "no pull requests found")
@@ -48,7 +70,11 @@ class FakeGh:
                             args[args.index("--body") + 1])
             return ok()
         if args[1:3] == ["pr", "create"]:
-            self.pr = {"number": 1, "url": "https://github.example/acme/repo/pull/1", "state": "OPEN"}
+            number = self.pr["number"] + 1 if self.pr else 1
+            self.reviews = []
+            self.pr = {"number": number, "url": f"https://github.example/acme/repo/pull/{number}",
+                       "state": "OPEN", "branch": args[args.index("--head") + 1],
+                       "title": args[args.index("--title") + 1]}
             return ok(self.pr["url"] + "\n")
         return ok()
 

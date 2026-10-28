@@ -111,12 +111,14 @@ def reviewer_message(plan: ReviewPlan, tier: Tier | None) -> str:
     return " ".join(parts) or "Nobody else needs to approve anything right now."
 
 
-def pr_title(feature: Feature) -> str:
+def pr_title(feature: Feature, branch: str = "") -> str:
+    if branch.startswith("decompose/"):
+        return f"{feature.id}: technical plan for {feature.title}"
     return f"{feature.id}: {feature.title}"
 
 
 def pr_body(feature: Feature, items: list[Artifact], config: Config, tier: Tier | None,
-            plan: ReviewPlan) -> str:
+            plan: ReviewPlan, flags: list[str] | tuple[str, ...] = ()) -> str:
     """The review request: risk answers next to the tier, then each item."""
     lines = [f"## {feature.id}: {feature.title}", ""]
     lines.append(f"Risk: **{tier.display}**" if tier else "Risk: **no valid risk profile yet**")
@@ -131,6 +133,8 @@ def pr_body(feature: Feature, items: list[Artifact], config: Config, tier: Tier 
         pending = [reviewers.role_label(c.role) for c in reviewers.pending(config, a, tier)]
         lines.append(f"| {a.id} | {a.title} | v{a.version} | {a.status} | "
                      f"{', '.join(pending) if pending else '—'} |")
+    if flags:
+        lines += ["", "### Flagged for the reviewer", ""] + [f"- {f}" for f in flags]
     report = feature.path / "evals" / "report.md"
     lines += ["", "### Eval report", ""]
     lines.append(report.read_text(encoding="utf-8").strip() if report.is_file() else "_Not run yet._")

@@ -18,9 +18,9 @@ def submit_feature(env):
     assert env("submit")[0] == 0
 
 
-def as_user(env, user, *argv):
+def as_user(env, user, *argv, **kw):
     env.gh.user = user
-    return env(*argv)
+    return env(*argv, **kw)
 
 
 def item(env, pattern):

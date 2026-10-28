@@ -330,6 +330,17 @@ latest eval report passing and newer than the asset version, and:
 
 On fail, list each unmet requirement in plain language, with who can resolve it.
 
+`/handoff` works in two passes. When the gate is clear it builds the package
+(an artifact `HND-xxx`, status `in_review`, parents = every item handed off)
+and asks for it to be accepted: routing for `handoff` plus the tier's extra
+reviewers approve it with `/approve`. Run again once accepted, it squash-merges
+the PR and tags `FEAT-001/handoff-v<n>` (n = the HND number); which packages
+have been handed off is read from those tags. If anything handed off changes
+before the merge, the package goes stale and is rebuilt as a new version.
+The same gate runs in CI `validate` for any package that is in review or
+approved for the current content, and the package's files are checked against
+`manifest.json` checksums (they are frozen once built).
+
 Bundle `handoff/HND-xxx/`:
 - `spec.md`: one readable document compiled from discovery, requirements, criteria
 - `risk.md`: the approved risk profile
@@ -342,6 +353,12 @@ Bundle `handoff/HND-xxx/`:
 components, interfaces and contracts, data, risks, and a task list where every
 task references the criteria it satisfies. Tasks with no criterion are flagged.
 The golden set becomes the regression gate for the implementation.
+It works on its own branch `decompose/FEAT-xxx` (from `main`, after the handoff
+is merged) and `/submit` opens a PR from it. The plan starts as a scaffold built
+from the package (one starter task per criterion plus the regression gate);
+its tasks live in a yaml block under `## Tasks`. A flagged task (no criterion)
+or a criterion no task covers is a warning, shown in `/status` and in the
+review request, not a block: the reviewer decides. An unknown criterion is an error.
 
 ## 11. Viewer site
 
