@@ -29,9 +29,9 @@ One JSON object with `category` (one of the five queues) and `urgent`
 (true or false). These match the fields in the golden set.
 
 ## Model and settings
-The model is set in the frontmatter (`model`). The worked example's saved
-answers come from a scripted stand-in, so CI needs no API key; see
-docs/decisions.md for how to record real ones.
+The model is set in `aidlc.yaml` (`eval.model`). Saved answers in
+`evals/cache/` let CI re-run the golden set without an API key; a change to
+this prompt or the model needs a new `/eval --live`.
 
 ## Human review step
 Front-desk staff see the suggested queue and urgent flag next to the guest
