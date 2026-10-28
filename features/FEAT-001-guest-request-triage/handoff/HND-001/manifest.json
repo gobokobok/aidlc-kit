@@ -1,0 +1,124 @@
+{
+  "feature": "FEAT-001",
+  "title": "Guest request triage",
+  "handoff": {
+    "id": "HND-001",
+    "version": 1
+  },
+  "tier": "T2",
+  "generated_at": "2026-10-28T11:54:46Z",
+  "commit": "c9ad52b5516362f8b8c32dc2b3dc35be7bf1b73c",
+  "items": [
+    {
+      "id": "RISK-001",
+      "type": "risk",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "risk.md",
+      "sha256": "17fb090cc151fefecf702923ba1cdbe32d35b5679be8c2d3a5a179e97881180a"
+    },
+    {
+      "id": "DISC-001",
+      "type": "discovery",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "discovery.md",
+      "sha256": "5d87be9fe520882e31aa73d5cd93f3cdd28a864b292c0354846a66aab9f8408b"
+    },
+    {
+      "id": "REQ-001",
+      "type": "requirement",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "requirements/REQ-001.md",
+      "sha256": "23278a7401bb258e656303f9fbf4823af206fb8f43daf6c901c029e7246e63e6"
+    },
+    {
+      "id": "REQ-002",
+      "type": "requirement",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "requirements/REQ-002.md",
+      "sha256": "1f42a13a74bd46e0e6887f4d94cd70e803f50fc799a90efcd4584c7f85cf759d"
+    },
+    {
+      "id": "REQ-003",
+      "type": "requirement",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "requirements/REQ-003.md",
+      "sha256": "e4d15cb1f21e3145263fd8255cd781d8ba4e6c74bec0dff376b9a290076a01d3"
+    },
+    {
+      "id": "AC-001",
+      "type": "criteria",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "criteria/AC-001.md",
+      "sha256": "7ad8461202097d571190c1180010855772d9a646445efd8d7dfb4e0ffbfcab45"
+    },
+    {
+      "id": "AC-002",
+      "type": "criteria",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "criteria/AC-002.md",
+      "sha256": "a8de47932126dc090944a30ebe23ff13d1e8dc3d75e5b2d436408ea013ee98bf"
+    },
+    {
+      "id": "ASSET-001",
+      "type": "asset",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "assets/ASSET-001.md",
+      "sha256": "262be67ded27c455f8a4d3f2d6a15b9b304c41fbdb6c8f900a20fab8bd356ad9"
+    },
+    {
+      "id": "EVAL-001",
+      "type": "eval",
+      "version": 1,
+      "owner": "gobokobok",
+      "approvers": [
+        "alexdanm-oss"
+      ],
+      "file": "evals/EVAL-001.md",
+      "sha256": "beaaf83ebeb6376fedeba5b8da19531cae8198addb220ecf18fd1327a8baac26"
+    }
+  ],
+  "eval": {
+    "pass": true,
+    "golden_sha256": "aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23"
+  },
+  "files": {
+    "assets/ASSET-001.md": "262be67ded27c455f8a4d3f2d6a15b9b304c41fbdb6c8f900a20fab8bd356ad9",
+    "eval-report.md": "953cff702f3feacfedfaf2ecc6d49d1312f10b468ce9538b9eb362be07187643",
+    "golden.yaml": "aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23",
+    "risk.md": "17fb090cc151fefecf702923ba1cdbe32d35b5679be8c2d3a5a179e97881180a",
+    "spec.md": "08bfee258b39649d998d8af0d13833e456f840544db8f2dd06d2da6ca042113b",
+    "trace.json": "587a0e3bb420da17496aade366c20693b13bbfc6c9bcab123ab82063336d95de"
+  }
+}
