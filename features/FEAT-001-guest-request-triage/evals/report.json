@@ -1,0 +1,169 @@
+{
+  "feature": "FEAT-001",
+  "generated_at": "2026-10-28T11:41:25Z",
+  "mode": "live",
+  "provider": "anthropic",
+  "tier": "T2",
+  "assets": [
+    {
+      "id": "ASSET-001",
+      "version": 1,
+      "model": "claude-sonnet-5-5"
+    }
+  ],
+  "golden": {
+    "sha256": "aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23",
+    "cases": 20
+  },
+  "criteria": [
+    {
+      "id": "AC-001",
+      "version": 1,
+      "title": "Messages land in the right queue",
+      "thresholds": {
+        "accuracy": 0.9,
+        "max_invalid": 0,
+        "max_unsafe": 0
+      },
+      "metrics": {
+        "cases": 20,
+        "accuracy": 0.9,
+        "unsafe": 1,
+        "invalid": 0,
+        "category_accuracy": 0.95,
+        "urgent_accuracy": 0.95,
+        "urgent_recall": 0.8571,
+        "urgent_precision": 1.0
+      },
+      "checks": [
+        {
+          "threshold": "accuracy",
+          "metric": "accuracy",
+          "op": ">=",
+          "limit": 0.9,
+          "value": 0.9,
+          "pass": true
+        },
+        {
+          "threshold": "max_invalid",
+          "metric": "invalid",
+          "op": "<=",
+          "limit": 0,
+          "value": 0,
+          "pass": true
+        },
+        {
+          "threshold": "max_unsafe",
+          "metric": "unsafe",
+          "op": "<=",
+          "limit": 0,
+          "value": 1,
+          "pass": false
+        }
+      ],
+      "problems": [],
+      "pass": false
+    },
+    {
+      "id": "AC-002",
+      "version": 1,
+      "title": "Urgent messages are not missed",
+      "thresholds": {
+        "urgent_recall": 0.95,
+        "urgent_precision": 0.8,
+        "max_unsafe": 0,
+        "accuracy": 0.85
+      },
+      "metrics": {
+        "cases": 10,
+        "accuracy": 0.9,
+        "unsafe": 1,
+        "invalid": 0,
+        "category_accuracy": 1.0,
+        "urgent_accuracy": 0.9,
+        "urgent_recall": 0.8571,
+        "urgent_precision": 1.0
+      },
+      "checks": [
+        {
+          "threshold": "urgent_recall",
+          "metric": "urgent_recall",
+          "op": ">=",
+          "limit": 0.95,
+          "value": 0.8571,
+          "pass": false
+        },
+        {
+          "threshold": "urgent_precision",
+          "metric": "urgent_precision",
+          "op": ">=",
+          "limit": 0.8,
+          "value": 1.0,
+          "pass": true
+        },
+        {
+          "threshold": "max_unsafe",
+          "metric": "unsafe",
+          "op": "<=",
+          "limit": 0,
+          "value": 1,
+          "pass": false
+        },
+        {
+          "threshold": "accuracy",
+          "metric": "accuracy",
+          "op": ">=",
+          "limit": 0.85,
+          "value": 0.9,
+          "pass": true
+        }
+      ],
+      "problems": [],
+      "pass": false
+    }
+  ],
+  "errors": [],
+  "failing_cases": [
+    {
+      "id": "G-001",
+      "criteria": [
+        "AC-001",
+        "AC-002"
+      ],
+      "tags": [
+        "safety"
+      ],
+      "input": "The shower in room 412 is leaking onto the floor",
+      "expected": {
+        "category": "maintenance",
+        "urgent": true
+      },
+      "actual": {
+        "category": "maintenance",
+        "urgent": false
+      },
+      "error": null,
+      "refused": false
+    },
+    {
+      "id": "G-014",
+      "criteria": [
+        "AC-001"
+      ],
+      "tags": [],
+      "input": "Can you recommend a good hiking trail nearby?",
+      "expected": {
+        "category": "other",
+        "urgent": false
+      },
+      "actual": {
+        "category": "front_desk",
+        "urgent": false
+      },
+      "error": null,
+      "refused": false
+    }
+  ],
+  "answered_by_fallback_model": [],
+  "pass": false
+}
