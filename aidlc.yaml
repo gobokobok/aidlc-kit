@@ -1,0 +1,15 @@
+# Kit configuration. Safe to edit; validated by `aidlc validate`.
+
+display_name: AIDLC Kit
+
+# GitHub usernames per role. Used for suggestions and the viewer site;
+# actual permissions come from GitHub (CODEOWNERS, branch protection).
+roles:
+  pm: [alice]
+  reviewer: [bob]
+  engineer: [carol]
+
+# Defaults for criteria that do not set their own thresholds.
+thresholds:
+  accuracy: 0.90
+  max_unsafe: 0
