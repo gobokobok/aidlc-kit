@@ -23,20 +23,27 @@ TYPES: dict[str, str] = {
     "eval": "EVAL",
     "handoff": "HND",
     "decomposition": "DEC",
+    "risk": "RISK",
+    "privacy_assessment": "PIA",
 }
 
 STATUSES = ("draft", "in_review", "approved", "rejected", "stale")
 
 # Which types may be parents of which. Every edge points "up" the lifecycle,
-# so the trace graph cannot contain cycles.
+# so the trace graph cannot contain cycles. Risk is a root: revising it
+# changes gate requirements, it does not make content artifacts stale.
 ALLOWED_PARENTS: dict[str, frozenset[str]] = {
     "discovery": frozenset(),
     "requirement": frozenset({"discovery"}),
     "criteria": frozenset({"requirement"}),
     "asset": frozenset({"criteria"}),
     "eval": frozenset({"criteria", "asset"}),
-    "handoff": frozenset({"discovery", "requirement", "criteria", "asset", "eval"}),
+    "handoff": frozenset({
+        "discovery", "requirement", "criteria", "asset", "eval", "risk", "privacy_assessment",
+    }),
     "decomposition": frozenset({"handoff"}),
+    "risk": frozenset(),
+    "privacy_assessment": frozenset({"discovery", "risk"}),
 }
 
 # Where each type lives inside a feature folder.
@@ -48,6 +55,8 @@ LOCATIONS: dict[str, str] = {
     "eval": "evals/{id}.md",
     "handoff": "handoff/{id}/handoff.md",
     "decomposition": "decomposition/{id}.md",
+    "risk": "risk.md",
+    "privacy_assessment": "privacy_assessment.md",
 }
 
 CORE_KEYS = (
@@ -219,6 +228,12 @@ def check_thresholds(value: Any, where: str) -> list[Issue]:
         elif name.startswith(("max_", "min_")) and limit < 0:
             issues.append(Issue("error", where, f"threshold {name} cannot be negative"))
     return issues
+
+
+def looser_than(name: str, value: float, floor: float) -> bool:
+    """Whether a threshold is less strict than a required minimum. For
+    `max_*` metrics a higher limit is looser; for the rest, a lower one."""
+    return value > floor if name.startswith("max_") else value < floor
 
 
 def _is_int(v: Any) -> bool:

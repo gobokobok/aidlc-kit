@@ -60,3 +60,61 @@ Newest last. Each entry: date, decision, alternatives rejected, why.
 - **Decision:** a non-discovery artifact with no parents is a warning while it
   is a draft and an error once submitted or approved.
 - **Why:** soft gates: drafts are free, but nothing reaches review untraced.
+
+## 2026-10-28: Risk and privacy assessment artifact shapes
+
+- **Decision:** `risk.md` (RISK-001) and `privacy_assessment.md` (prefix `PIA`)
+  live at the feature root, one of each per feature. Risk has no parents.
+  A privacy assessment may link to discovery and risk, so revising the risk
+  answers marks it stale. Handoff may link to both.
+- **Rejected:** risk as a child of discovery.
+- **Why:** the spec makes risk a root: a risk change alters gate requirements,
+  not content. A privacy assessment, unlike content, is written *about* the
+  risk answers, so it should be re-checked when they change.
+
+## 2026-10-28: A lowered tier waits for approval (`approved_tier`)
+
+- **Decision:** the risk artifact carries `approved_tier`, written when the risk
+  profile becomes approved. The governing tier is the higher of
+  `declared_tier` and `approved_tier` until the current version is approved.
+  `declared_tier` can never be below the computed tier.
+- **Rejected:** reading the previous approved tier from Git history.
+- **Why:** keeps the rule checkable from the files alone, in the CLI, the
+  validator and the viewer. Raising applies at once; lowering needs a new
+  version approved by `risk_reviewer` (risk routing), as the spec requires.
+  A hand edit of `approved_tier` shows up in the PR diff; step 3 CI can
+  compare it with `main`.
+
+## 2026-10-28: Risk profile always routes to risk_reviewer, even at Tier 1
+
+- **Decision:** routing in `aidlc.yaml` is applied as written:
+  `risk: [risk_reviewer]` for every tier.
+- **Rejected:** skipping the risk reviewer at Tier 1.
+- **Why:** a Tier 1 result comes from self-declared answers; the risk
+  reviewer's challenge is what makes it trustworthy. Config stays the single
+  source of truth: to relax it, change the routing.
+
+## 2026-10-28: Unrouted types need one approval from anyone but the author
+
+- **Decision:** types missing from `review_routing` (eval, decomposition,
+  privacy assessment) require the pseudo-role `any_reviewer`, plus tier extras.
+- **Why:** keeps the original "approver differs from author" rule for them
+  without inventing routing the spec did not give.
+
+## 2026-10-28: Validator warns about role approvals; CI and the gate enforce
+
+- **Decision:** `validate` warns when an approved artifact lacks a role (for
+  example after a tier rise) and errors only on hard inconsistencies
+  (self-approval, approved with no other approver, declared tier below
+  computed, missing `human_review_step` once submitted).
+- **Why:** the spec says a tier rise should fail the handoff gate, not
+  invalidate earlier approvals. Enforcement is `approvals_complete` (step 3)
+  and the gate (step 5).
+
+## 2026-10-28: Second PM and a data owner in the default config
+
+- **Decision:** `aidlc.yaml` adds `dana: [pm]` and `lee: [data_owner]` to the
+  people from the spec.
+- **Why:** with one PM, `pm_peer` can never be satisfied, so no discovery could
+  be approved; with no data owner, no Tier 3 feature could pass. The config
+  check warns about both situations.

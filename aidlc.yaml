@@ -1,13 +1,34 @@
-# Kit configuration. Safe to edit; validated by `aidlc validate`.
+# Kit configuration: the single source of truth for who reviews what.
+# Safe to edit; validated by `aidlc validate`.
 
 display_name: AIDLC Kit
 
-# GitHub usernames per role. Used for suggestions and the viewer site;
-# actual permissions come from GitHub (CODEOWNERS, branch protection).
-roles:
-  pm: [alice]
-  reviewer: [bob]
-  engineer: [carol]
+# Who is in which role (GitHub usernames).
+people:
+  alice: [pm]
+  dana: [pm]              # a second PM, so discovery can get a PM peer approval
+  bob: [ops_reviewer]
+  priya: [tech_reviewer]
+  sam: [risk_reviewer]
+  lee: [data_owner]       # needed by Tier 3 features
+  jonas: [engineer]
+
+# Which roles must approve which artifact type. `pm_peer` means any person
+# with role `pm` other than the author. Types not listed need one approval
+# from anyone other than the author.
+review_routing:
+  discovery:    [pm_peer]
+  requirement:  [ops_reviewer, tech_reviewer]
+  criteria:     [ops_reviewer, tech_reviewer]
+  asset:        [tech_reviewer]
+  risk:         [risk_reviewer]
+  handoff:      [tech_reviewer]
+
+# What each risk tier adds on top of the routing above.
+risk_tiers:
+  T1: {label: Low,    extra_reviewers: [],                          required_artifacts: [],                   min_thresholds: {},               human_in_loop: false}
+  T2: {label: Medium, extra_reviewers: [risk_reviewer],             required_artifacts: [],                   min_thresholds: {accuracy: 0.85}, human_in_loop: false}
+  T3: {label: High,   extra_reviewers: [risk_reviewer, data_owner], required_artifacts: [privacy_assessment], min_thresholds: {accuracy: 0.95}, human_in_loop: true}
 
 # Defaults for criteria that do not set their own thresholds.
 thresholds:

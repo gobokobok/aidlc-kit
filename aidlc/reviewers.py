@@ -1,0 +1,79 @@
+"""Review routing: who must approve what, resolved from aidlc.yaml.
+
+Effective required roles for an artifact = `review_routing[type]` plus the
+feature tier's `extra_reviewers`. A role is satisfied when someone holding it,
+other than the author, has approved the current version.
+"""
+
+from dataclasses import dataclass
+
+from aidlc.artifacts import Artifact
+from aidlc.config import ANY_REVIEWER, PM_PEER, Config, Tier
+
+
+@dataclass(frozen=True)
+class RoleCheck:
+    role: str
+    reason: str                    # "routing" or the tier name that added it
+    approved_by: tuple[str, ...]   # approvers on the current version who count
+    candidates: tuple[str, ...]    # people who could still satisfy it
+
+    @property
+    def satisfied(self) -> bool:
+        return bool(self.approved_by)
+
+
+def role_label(role: str) -> str:
+    """Short human name for a role: ops_reviewer -> Ops, pm_peer -> PM peer."""
+    fixed = {PM_PEER: "PM peer", ANY_REVIEWER: "any reviewer", "pm": "PM"}
+    if role in fixed:
+        return fixed[role]
+    words = role.removesuffix("_reviewer").replace("_", " ")
+    return words[:1].upper() + words[1:]
+
+
+def holds(config: Config, person: str, role: str, author: str) -> bool:
+    """Whether `person` can satisfy `role` for an artifact owned by `author`."""
+    if person == author:
+        return False
+    if role == ANY_REVIEWER:
+        return True
+    if role == PM_PEER:
+        return "pm" in config.people.get(person, ())
+    return role in config.people.get(person, ())
+
+
+def holders(config: Config, role: str, author: str) -> tuple[str, ...]:
+    return tuple(p for p in config.people if holds(config, p, role, author))
+
+
+def required_roles(config: Config, artifact_type: str, tier: Tier | None) -> list[tuple[str, str]]:
+    """(role, reason) pairs in order, without duplicates."""
+    out: list[tuple[str, str]] = []
+    for role in config.review_routing.get(artifact_type, (ANY_REVIEWER,)):
+        out.append((role, "routing"))
+    for role in tier.extra_reviewers if tier else ():
+        if role not in (r for r, _ in out):
+            out.append((role, tier.name))
+    return out
+
+
+def role_checks(config: Config, a: Artifact, tier: Tier | None) -> list[RoleCheck]:
+    approvers = [ap.by for ap in a.approved_current]
+    return [
+        RoleCheck(
+            role=role,
+            reason=reason,
+            approved_by=tuple(p for p in approvers if holds(config, p, role, a.owner)),
+            candidates=holders(config, role, a.owner),
+        )
+        for role, reason in required_roles(config, a.type, tier)
+    ]
+
+
+def pending(config: Config, a: Artifact, tier: Tier | None) -> list[RoleCheck]:
+    return [c for c in role_checks(config, a, tier) if not c.satisfied]
+
+
+def roles_complete(config: Config, a: Artifact, tier: Tier | None) -> bool:
+    return not pending(config, a, tier)

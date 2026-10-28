@@ -2,7 +2,7 @@ from aidlc import artifacts as art
 from aidlc.cli import main
 from aidlc.validate import refresh_statuses, validate_repo
 
-from conftest import approved_chain, make
+from conftest import approved_chain, make, make_risk
 
 
 def messages(root, severity="error"):
@@ -13,7 +13,7 @@ def test_valid_chain_passes(repo):
     root = repo(*approved_chain())
     report = validate_repo(root)
     assert report.ok, messages(root)
-    assert len(report.artifacts) == 3
+    assert len(report.artifacts) == 4
     assert report.warnings == []
 
 
@@ -70,7 +70,7 @@ def test_missing_parent_is_warning_for_draft_error_otherwise(repo):
 
 def test_stale_mismatch_is_an_error_until_written(repo):
     chain = approved_chain()
-    chain[0] = make("DISC-001", "discovery", version=2, status="approved", approvals=(("bob", 2),))
+    chain[1] = make("DISC-001", "discovery", version=2, status="approved", approvals=(("dana", 2), ("sam", 2)))
     root = repo(*chain)
     assert any("FEAT-001/REQ-001: is out of date because DISC-001 is now v2" in e for e in messages(root))
 
@@ -151,12 +151,64 @@ def test_bad_config_is_reported(repo):
 def test_cli_validate(repo, capsys):
     root = repo(*approved_chain())
     assert main(["--root", str(root), "validate"]) == 0
-    assert "All 3 artifact(s) are valid." in capsys.readouterr().out
+    assert "All 4 artifact(s) are valid." in capsys.readouterr().out
 
-    repo(make("DISC-001", "discovery", version=2, status="approved", approvals=(("bob", 2),)))
+    repo(make("DISC-001", "discovery", version=2, status="approved", approvals=(("dana", 2), ("sam", 2))))
     assert main(["--root", str(root), "validate"]) == 1
     assert "Found 1 problem(s)" in capsys.readouterr().out
 
     assert main(["--root", str(root), "validate", "--write"]) == 0
     out = capsys.readouterr().out
     assert "Marked FEAT-001/REQ-001 as stale (was approved)." in out
+
+
+# --- risk and reviewers ----------------------------------------------------
+
+def test_missing_risk_profile_warns(repo):
+    root = repo(make("DISC-001", "discovery"))
+    assert any("has no risk profile" in w for w in messages(root, "warning"))
+
+
+def test_risk_profile_below_computed_tier_is_an_error(repo):
+    root = repo(make_risk("T1"))
+    assert any("lower than the computed T2" in e for e in messages(root))
+
+
+def test_risk_is_a_root_artifact(repo):
+    root = repo(make("DISC-001", "discovery"), make_risk(parents=(("DISC-001", 1),)))
+    assert any("cannot have a discovery" in e for e in messages(root))
+
+
+def test_risk_change_does_not_make_content_stale(repo):
+    chain = approved_chain()
+    chain[0] = make_risk("T3", version=2, approved_tier="T2")
+    root = repo(*chain)
+    assert refresh_statuses(root) == []
+
+
+def test_tier_rise_flags_missing_role_approvals_and_artifacts(repo):
+    chain = approved_chain()
+    chain[0] = make_risk("T3", version=2, approved_tier="T2")
+    root = repo(*chain)
+    warnings = messages(root, "warning")
+    assert any("REQ-001: is approved but still needs Data owner approval, which Tier 3 (High) adds" in w
+               for w in warnings)
+    assert any("Tier 3 (High) needs a privacy assessment" in w for w in warnings)
+    assert any("accuracy 0.9 is looser than the Tier 3 (High) minimum of 0.95" in w for w in warnings)
+    assert validate_repo(root).ok  # the handoff gate, not validate, blocks this
+
+
+def test_human_in_loop_requires_review_step(repo):
+    base = [make_risk("T3"), make("AC-001", "criteria", thresholds={"accuracy": 0.95})]
+    root = repo(*base, make("ASSET-001", "asset", parents=(("AC-001", 1),)))
+    assert any("describe that step in `human_review_step`" in w for w in messages(root, "warning"))
+    repo(make("ASSET-001", "asset", status="in_review", parents=(("AC-001", 1),)))
+    assert any("describe that step in `human_review_step`" in e for e in messages(root))
+    repo(make("ASSET-001", "asset", status="in_review", parents=(("AC-001", 1),),
+              human_review_step="Front desk confirms the category before routing."))
+    assert not any("human_review_step" in m for m in messages(root) + messages(root, "warning"))
+
+
+def test_approver_not_in_people_warns(repo):
+    root = repo(make_risk(approvals=(("stranger", 1),)))
+    assert any("stranger is not listed under people" in w for w in messages(root, "warning"))

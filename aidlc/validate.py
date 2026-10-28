@@ -9,9 +9,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from aidlc import artifacts as art
-from aidlc import trace
+from aidlc import reviewers, risk, trace
 from aidlc.artifacts import ALLOWED_PARENTS, LOCATIONS, Artifact, ArtifactError, Issue
-from aidlc.config import load_config
+from aidlc.config import Config, load_config
 
 FEATURES_DIR = "features"
 
@@ -98,9 +98,11 @@ def load_feature(feature_dir: Path, root: Path) -> tuple[str | None, list[Artifa
     return feature_id, loaded, issues
 
 
-def check_feature(items: list[Artifact]) -> list[Issue]:
+def check_feature(items: list[Artifact], config: Config | None = None) -> list[Issue]:
     """Cross-artifact rules for one feature. Pure."""
+    config = config or Config()
     issues: list[Issue] = []
+    tier = risk.feature_tier(items, config)
     counts = Counter(a.id for a in items)
     for dup, n in counts.items():
         if n > 1:
@@ -144,6 +146,32 @@ def check_feature(items: list[Artifact]) -> list[Issue]:
                 warn(f"approval by {ap.by} was for v{ap.version} and no longer counts for v{a.version}")
         if a.status == "approved" and not any(ap.by != a.owner for ap in a.approved_current):
             err(f"is marked approved but nobody other than the owner approved v{a.version}")
+        if config.people:
+            for ap in a.approved_current:
+                if ap.by != a.owner and ap.by not in config.people:
+                    warn(f"{ap.by} is not listed under people in aidlc.yaml, "
+                         "so their approval cannot count for a named role")
+        # Role approvals are enforced by approvals_complete and the handoff
+        # gate. A tier can rise after approval, so here it is only a heads-up.
+        if a.status == "approved":
+            for check in reviewers.pending(config, a, tier):
+                why = "" if check.reason == "routing" else f", which {config.tier(check.reason).display} adds"
+                warn(f"is approved but still needs {reviewers.role_label(check.role)} approval{why}")
+
+        # Risk
+        if a.type == "risk":
+            issues.extend(risk.check_fields(a, config, where))
+        if (a.type == "asset" and tier and tier.human_in_loop
+                and not str(a.extra.get("human_review_step") or "").strip()):
+            (warn if a.status == "draft" else err)(
+                f"{tier.display} needs a person to check the AI output; "
+                "describe that step in `human_review_step`")
+        if a.type == "criteria" and tier and isinstance(a.extra.get("thresholds"), dict):
+            for name, floor in tier.min_thresholds.items():
+                value = a.extra["thresholds"].get(name)
+                if value is not None and art.looser_than(name, value, floor):
+                    warn(f"threshold {name} {value} is looser than the {tier.display} minimum of "
+                         f"{floor}; evals will fail until it is tightened")
 
         # Computed status
         expected = trace.expected_status(a, by_id)
@@ -159,6 +187,15 @@ def check_feature(items: list[Artifact]) -> list[Issue]:
         if a.type == "criteria" and "thresholds" not in a.extra:
             warn("criteria has no thresholds; the defaults in aidlc.yaml will apply")
 
+    feature = items[0].feature if items else ""
+    if items and not any(a.type == "risk" for a in items):
+        issues.append(Issue("warning", feature, "has no risk profile yet; run /risk to create one"))
+    if tier:
+        present = {a.type for a in items}
+        for needed in tier.required_artifacts:
+            if needed not in present:
+                issues.append(Issue("warning", feature, (
+                    f"{tier.display} needs a {needed.replace('_', ' ')}; none exists yet")))
     return issues
 
 
@@ -182,11 +219,11 @@ def load_repo(root: Path) -> tuple[list[Artifact], list[Issue]]:
 
 
 def validate_repo(root: Path) -> Report:
-    _, issues = load_config(root)
+    config, issues = load_config(root)
     items, found = load_repo(root)
     issues.extend(found)
     for feature_id in sorted({a.feature for a in items}):
-        issues.extend(check_feature([a for a in items if a.feature == feature_id]))
+        issues.extend(check_feature([a for a in items if a.feature == feature_id], config))
     return Report(tuple(items), tuple(issues))
 
 

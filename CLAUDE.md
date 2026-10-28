@@ -42,7 +42,7 @@ Keep the product generic: no company names. Display name is set in `aidlc.yaml`
 
 | # | Command | Purpose | Input | Output | Behind the scenes |
 |---|---|---|---|---|---|
-| 0 | `/new-feature` | Open a workspace | Name, owner | `features/FEAT-xxx/` | Branch `feat/FEAT-xxx` created |
+| 0 | `/new-feature` | Open a workspace and profile its risk | Name, owner, risk questionnaire answers | `features/FEAT-xxx/` incl. `risk.md` (RISK-xxx) | Branch `feat/FEAT-xxx` created, tier computed |
 | 1 | `/discover` | Agree on why | Notes, interviews, data | `discovery.md` | Commit |
 | 2 | `/requirement` | Agree on what | Discovery brief | `requirements/REQ-xxx.md` | Commit, parent link |
 | 3 | `/criteria` | Make done testable | Requirements | `criteria/AC-xxx.md` incl. AI thresholds | Commit, parent link |
@@ -54,6 +54,8 @@ Keep the product generic: no company names. Display name is set in `aidlc.yaml`
 | 9 | `/decompose` | Spec-driven technical plan | Handoff bundle | `decomposition/DEC-xxx.md` + tasks | Branch, PR |
 | — | `/status` | Where am I, what's next | — | Plain-language summary | Reads repo state |
 | — | `/change` | Edit an approved artifact | Artifact ID | New version; downstream marked stale | Commit |
+| — | `/risk` | Revise the risk profile | New questionnaire answers | New RISK version, tier recomputed | Commit |
+| — | `/reviewers` | Who still has to approve what | — | Pending roles and people per artifact | Reads repo state + `aidlc.yaml` |
 
 Every command ends by telling the PM, in one or two plain sentences, what
 happened and what the next step is. Never show raw Git output unless asked.
@@ -61,7 +63,8 @@ happened and what the next step is. Never show raw Git output unless asked.
 ## 5. Repository layout
 
 ```
-aidlc.yaml                  # kit config: display name, roles, thresholds defaults
+aidlc.yaml                  # kit config: display name, people, review routing,
+                            #   risk tiers, thresholds defaults
 CLAUDE.md
 README.md
 .claude/commands/*.md       # slash commands (thin: call the CLI, then explain)
@@ -71,20 +74,23 @@ aidlc/                      # Python package
   trace.py                  # parent links, staleness, trace graph
   gitops.py                 # all Git/gh calls live here and only here
   review.py                 # submit/approve/reject, approver != author
+  risk.py                   # risk questionnaire, tier computation
+  reviewers.py              # review routing, role resolution, CODEOWNERS generation
   audit.py                  # append-only audit log
   evals/runner.py           # golden-set runner
   evals/model.py            # cached + live model client
   handoff.py                # gate check + bundle builder
   decompose.py              # engineer decomposition scaffold
   site/build.py             # static viewer generator
-  templates/                # artifact templates (markdown + frontmatter)
+  templates/                # artifact templates (markdown + frontmatter),
+                            #   incl. risk.md and privacy_assessment.md
 features/FEAT-001-guest-request-triage/   # worked example
 audit/log.jsonl             # append-only, written only by CI on merge
 site/                       # generated, not committed
 docs/                       # architecture, workflow, trade-offs, limitations
 tests/
 .github/workflows/          # validate, eval, audit, deploy-site
-.github/CODEOWNERS
+.github/CODEOWNERS          # generated from aidlc.yaml by `aidlc sync-codeowners`
 ```
 
 ## 6. Artifact model
@@ -94,6 +100,7 @@ Markdown files with YAML frontmatter. Body is plain language for PMs.
 ```yaml
 id: REQ-003
 type: requirement        # discovery | requirement | criteria | asset | eval | handoff | decomposition
+                         #   | risk | privacy_assessment
 feature: FEAT-001
 title: Route maintenance requests to engineering queue
 version: 2               # integer, bumped on every change after first approval
@@ -123,6 +130,83 @@ thresholds:
   max_unsafe: 0
 ```
 
+### 6a. Who reviews what: single source of truth is `aidlc.yaml`
+
+```yaml
+people:                       # who is in which role (GitHub usernames)
+  alice: [pm]
+  bob: [ops_reviewer]
+  priya: [tech_reviewer]
+  sam: [risk_reviewer]
+  jonas: [engineer]
+
+review_routing:               # which roles must approve which artifact type
+  discovery:    [pm_peer]     # any other PM; at least one approver
+  requirement:  [ops_reviewer, tech_reviewer]
+  criteria:     [ops_reviewer, tech_reviewer]
+  asset:        [tech_reviewer]
+  risk:         [risk_reviewer]
+  handoff:      [tech_reviewer]
+
+risk_tiers:                   # see 6b
+  T1: {label: Low,    extra_reviewers: [],                     required_artifacts: [],                      min_thresholds: {}, human_in_loop: false}
+  T2: {label: Medium, extra_reviewers: [risk_reviewer],        required_artifacts: [],                      min_thresholds: {accuracy: 0.85}, human_in_loop: false}
+  T3: {label: High,   extra_reviewers: [risk_reviewer, data_owner], required_artifacts: [privacy_assessment], min_thresholds: {accuracy: 0.95}, human_in_loop: true}
+```
+
+Rules:
+- `pm_peer` is a special role: any person with role `pm` other than the author.
+- A required role is satisfied when at least one person holding that role has an
+  approval on the current version of the artifact. Author never counts.
+- Effective required roles for an artifact = `review_routing[type]` plus the
+  feature's tier `extra_reviewers`.
+- `.github/CODEOWNERS` is **generated** from `people` and `review_routing` by
+  `aidlc sync-codeowners`. CI fails if the committed file differs from the generated one.
+- GitHub branch protection only enforces "1 approval + code owners". The role-based
+  rule is enforced by the CI check `approvals_complete`, which must be a required
+  status check on `main`.
+- `/submit` tells the PM in plain language who was asked to review and why
+  (for example: "Sent to bob (Ops) and priya (Tech). sam (Risk) is included
+  because this feature is Tier 2.").
+- `/reviewers` shows who must still approve what for the current feature.
+
+### 6b. Risk profile (artifact type `risk`, ID prefix RISK)
+
+Created automatically by `/new-feature` through a short guided questionnaire in
+plain language. Revisable with `/risk`.
+
+```yaml
+id: RISK-001
+type: risk
+feature: FEAT-001
+version: 1
+status: draft
+owner: alice
+data_classes: [personal]        # public | internal | confidential | personal | payment
+autonomy: suggest               # suggest | act_with_approval | act_autonomously
+audience: customer_facing       # internal | customer_facing
+regulated_decision: false       # affects pricing, eligibility, credit or similar
+declared_tier: T2               # computed by the CLI
+rationale: "Guest messages may contain names and room numbers."
+```
+
+Tier is computed by the CLI (deterministic, in `risk.py`):
+- T3 if `payment` in data_classes, or `regulated_decision` is true, or
+  `autonomy` is `act_autonomously` with `personal` or `confidential` data.
+- T2 if `personal` or `confidential` in data_classes, or `audience` is
+  `customer_facing`, or `autonomy` is `act_with_approval`.
+- Otherwise T1.
+
+Controls:
+- The author can raise the tier but cannot lower it after the risk artifact has
+  been approved. Lowering requires a new version approved by `risk_reviewer`.
+- At T2 and T3 the risk artifact itself requires `risk_reviewer` approval
+  (routing for type `risk`). The reviewer is expected to challenge the answers.
+  The review request must show the questionnaire answers next to the computed tier.
+- If the tier rises after other artifacts were approved, the handoff gate fails
+  until the new tier's requirements are met. Risk is a root artifact: a risk
+  change does not mark content artifacts stale, it changes gate requirements.
+
 ## 7. Git automation (gitops.py)
 
 - One branch per feature: `feat/FEAT-xxx`. Created on `/new-feature`.
@@ -141,13 +225,18 @@ thresholds:
 
 ## 8. Review, approval, audit
 
-- `.github/CODEOWNERS` defines reviewers per path.
-- Branch protection on `main` (documented, set manually): PR required, 1 approval,
-  required checks `validate` and `eval`.
+- `.github/CODEOWNERS` is generated from `people` and `review_routing` in
+  `aidlc.yaml` by `aidlc sync-codeowners` (see 6a). CI fails if the committed
+  file differs from the generated one.
+- Branch protection on `main` (documented, set manually): PR required, 1 approval
+  + code owners, required checks `validate`, `eval` and `approvals_complete`.
+- CI `approvals_complete`: for every non-draft artifact in the PR, all effective
+  required roles are satisfied on the current version, and approver is not the owner.
 - CI `validate`: frontmatter schema, ID uniqueness, parent links resolve,
   staleness recomputed, approver ≠ owner, handoff gate if a handoff bundle is present.
 - CI `audit` (on merge to `main`): appends one JSON line per changed artifact to
-  `audit/log.jsonl`: `{at, feature, id, version, status, actor, approvers, commit, pr}`.
+  `audit/log.jsonl`: `{at, feature, id, version, status, actor, approvers, tier,
+  roles_satisfied, commit, pr}`.
   CI check fails if any existing line in the log was modified or deleted.
 
 ## 9. Golden-set evaluation
@@ -156,6 +245,10 @@ thresholds:
   linked to one or more criteria IDs.
 - Runner: render prompt from the asset, call model, parse structured output,
   score against `expected`, compare metrics to criteria thresholds.
+- The runner reads `min_thresholds` for the feature's risk tier. If a criterion's
+  threshold is below the tier minimum, the eval fails with a clear message.
+- If `human_in_loop` is true for the tier, the asset must declare a human-review
+  step (checked by the validator).
 - Model client modes:
   - `cached` (default, CI): reads `evals/cache/<hash>.json`; hash = sha256 of
     model + prompt version + rendered input. Missing cache entry = test error, not a pass.
@@ -168,15 +261,21 @@ thresholds:
 ## 10. Handoff and decomposition
 
 `/handoff` hard gate: all artifacts in the feature `approved`, none `stale`,
-latest eval report passing and newer than the asset version. On fail, list
-exactly what blocks it, in plain language.
+latest eval report passing and newer than the asset version, and:
+- risk profile approved with a tier
+- all `required_artifacts` for the tier exist and are approved
+- all role-based approvals satisfied for every artifact
+- `human_in_loop` declared if the tier demands it
+
+On fail, list each unmet requirement in plain language, with who can resolve it.
 
 Bundle `handoff/HND-xxx/`:
 - `spec.md`: one readable document compiled from discovery, requirements, criteria
+- `risk.md`: the approved risk profile
 - `assets/`: frozen copy of prompts and config at approved versions
 - `golden.yaml` + `eval-report.md`
 - `trace.json`: full graph criterion → requirement → discovery, with versions
-- `manifest.json`: IDs, versions, approvers, commit SHA
+- `manifest.json`: IDs, versions, approvers, risk tier, commit SHA
 
 `/decompose` (engineer): reads the bundle and produces `DEC-xxx.md`:
 components, interfaces and contracts, data, risks, and a task list where every
@@ -187,8 +286,9 @@ The golden set becomes the regression gate for the implementation.
 
 Static HTML generated by `aidlc/site/build.py` (Jinja2), deployed to GitHub Pages
 by CI on every push to `main`. Pages:
-- Features overview: status per stage, blocking items
-- Feature detail: artifacts with version, owner, status, approvals
+- Features overview: status per stage, blocking items, risk tier badge
+- Feature detail: artifacts with version, owner, status, approvals, and the
+  required reviewer roles with a satisfied or pending marker
 - Trace graph: discovery → requirements → criteria → assets → evals → tasks
 - Audit timeline from `audit/log.jsonl`
 - Eval results per feature
@@ -203,14 +303,26 @@ urgent ones. Include a full chain: discovery, 2-3 requirements, criteria with
 thresholds, prompt asset, ~20 golden cases with committed cache, an approved
 review, a handoff bundle and one decomposition. The example must pass CI.
 
+FEAT-001 is Tier 2 (customer-facing, guest messages may contain personal data).
+Include an approved RISK-001 and show a risk reviewer in the approvals. Add a
+short second example in `docs/` showing how the same feature would change at
+Tier 3 (extra privacy assessment, stricter threshold).
+
 ## 13. Documentation (docs/)
 
-- `architecture.md`: components, data model, diagram
-- `workflow.md`: PM journey and engineer journey, step by step
+- `architecture.md`: components, data model, diagram, intake risk step,
+  reviewer routing model
+- `workflow.md`: PM journey and engineer journey, step by step, incl. the
+  intake risk step and reviewer routing
 - `trade-offs.md`: Git as store vs database; static viewer vs app; cached vs
-  live evals; Claude Code commands vs plain CLI; soft vs hard gates
+  live evals; Claude Code commands vs plain CLI; soft vs hard gates;
+  self-declared risk (mitigated by risk reviewer challenge, not eliminated);
+  process enforcement here versus platform controls (RBAC, data access, AI
+  gateway) elsewhere
 - `limitations.md`: honest list (concurrency, setup step, single repo, no SSO,
-  approvals depend on GitHub permissions)
+  approvals depend on GitHub permissions; roles and tiers are configuration,
+  not an identity system; the kit records and enforces process, it does not
+  replace technical data controls)
 - `demo.md`: a 5-minute demo script
 
 README: what it is, 3-step setup, demo walkthrough, links to site and docs.
@@ -221,20 +333,25 @@ README: what it is, 3-step setup, demo walkthrough, links to site and docs.
 - All Git and `gh` calls go through `gitops.py`; tests mock it.
 - Type hints; small pure functions; no global state.
 - Tests for: frontmatter validation, staleness, approver ≠ owner, handoff gate,
-  audit append-only check, eval scoring, site build.
+  audit append-only check, eval scoring, site build, tier computation, role
+  resolution (including `pm_peer`), required roles with tier extras, CODEOWNERS
+  generation and drift check, tier lowering blocked, extended handoff gate.
 - No secrets in the repo. No personal data in examples.
 - Log significant design decisions in `docs/decisions.md` (date, decision,
   alternatives rejected, why).
 
 ## 15. Build order
 
-1. Skeleton, `aidlc.yaml`, artifact model + validator + tests
-2. CLI commands + slash commands + `gitops.py`
-3. Review, approval, audit, CODEOWNERS, CI `validate` and `audit`
-4. Eval runner, cache, CI `eval`
-5. Handoff gate + bundle, `/decompose`
-6. Worked example end to end
-7. Viewer site + Pages deploy
+1. Skeleton, `aidlc.yaml`, artifact model + validator + tests; `risk` type,
+   risk and reviewer config schema, validation
+2. CLI commands + slash commands + `gitops.py`; `/new-feature` questionnaire,
+   `/risk`, `/reviewers`, `/submit` reviewer messaging
+3. Review, approval, audit, `sync-codeowners`, CI `validate`, `approvals_complete`
+   and `audit` (with tier and role fields)
+4. Eval runner, cache, CI `eval`, tier minimum thresholds
+5. Handoff gate (extended for risk) + bundle, `/decompose`
+6. Worked example end to end (Tier 2, plus Tier 3 variant in docs)
+7. Viewer site + Pages deploy, tier badges and reviewer markers
 8. Docs, README, demo script
 
 After each step: run tests, commit, and state what works and what is next.
@@ -246,3 +363,6 @@ After each step: run tests, commit, and state what works and what is next.
 - Audit log is append-only and enforced.
 - Example feature passes CI and appears on the deployed site.
 - Docs cover architecture, workflow, trade-offs and limitations.
+- Reviewers are resolved from `aidlc.yaml` and CODEOWNERS is generated from it.
+- A Tier 2 or Tier 3 feature cannot reach handoff without the risk reviewer's approval.
+- A PM can see at any time who still has to approve what.
