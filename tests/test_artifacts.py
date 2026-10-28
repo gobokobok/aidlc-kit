@@ -180,9 +180,10 @@ def test_edit_of_stale_approved_bumps_version():
     assert (b.version, b.status, b.approvals) == (2, "draft", ())
 
 
-def test_edit_of_stale_unreviewed_draft_keeps_version():
+def test_edit_of_any_stale_item_bumps_version():
+    # The status it had before going stale is lost, so assume it was reviewed.
     b = apply_edit(make("REQ-001", "requirement", status="stale"), T1)
-    assert (b.version, b.status) == (1, "draft")
+    assert (b.version, b.status) == (2, "draft")
 
 
 def test_approved_current_only_counts_current_version():

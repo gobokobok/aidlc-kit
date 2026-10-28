@@ -433,8 +433,10 @@ def save(a: Artifact, path: Path | None = None) -> Path:
 # --- versions ------------------------------------------------------------
 
 def has_been_reviewed(a: Artifact) -> bool:
-    """True if the current version has been put in front of a reviewer."""
-    return a.status in ("in_review", "approved", "rejected") or bool(a.approved_current)
+    """True if the current version may have been put in front of a reviewer.
+    Marking an item stale overwrites its earlier status, so stale counts as
+    reviewed: an extra version is cheaper than an edit slipping past review."""
+    return a.status in ("in_review", "approved", "rejected", "stale") or bool(a.approved_current)
 
 
 def apply_edit(a: Artifact, now: datetime, **changes: Any) -> Artifact:

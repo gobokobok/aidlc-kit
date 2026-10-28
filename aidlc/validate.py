@@ -8,12 +8,15 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+import yaml
+
 from aidlc import artifacts as art
 from aidlc import reviewers, risk, trace
 from aidlc.artifacts import ALLOWED_PARENTS, LOCATIONS, Artifact, ArtifactError, Issue
 from aidlc.config import Config, load_config
 
 FEATURES_DIR = "features"
+FEATURE_FILE = "feature.yaml"
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,24 @@ def feature_dirs(root: Path) -> list[Path]:
     return sorted(p for p in base.iterdir() if p.is_dir() and not p.name.startswith("."))
 
 
+def check_feature_file(text: str, feature_id: str, where: str) -> list[Issue]:
+    """feature.yaml holds the feature's name and owner."""
+    try:
+        meta = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return [Issue("error", where, "is not valid YAML")]
+    if not isinstance(meta, dict):
+        return [Issue("error", where, "must be a set of `key: value` lines")]
+    issues = []
+    if meta.get("id") != feature_id:
+        issues.append(Issue("error", where, f"says `id: {meta.get('id')}` but the folder is {feature_id}"))
+    if not isinstance(meta.get("title"), str) or not meta["title"].strip():
+        issues.append(Issue("error", where, "title must be a non-empty line of text"))
+    if not isinstance(meta.get("owner"), str) or not art.USERNAME_RE.match(meta["owner"]):
+        issues.append(Issue("error", where, "owner must be a GitHub username"))
+    return issues
+
+
 def _expected_id(artifact_type: str, rel: Path) -> str | None:
     """The ID implied by a file's location, if the location encodes one."""
     if "{id}" not in LOCATIONS[artifact_type]:
@@ -71,6 +92,10 @@ def load_feature(feature_dir: Path, root: Path) -> tuple[str | None, list[Artifa
 
     loaded: list[Artifact] = []
     issues: list[Issue] = []
+    meta_path = feature_dir / FEATURE_FILE
+    if meta_path.is_file():
+        issues.extend(check_feature_file(meta_path.read_text(encoding="utf-8"), feature_id,
+                                         str(meta_path.relative_to(root))))
     for a_type, pattern in LOCATIONS.items():
         for path in sorted(feature_dir.glob(pattern.format(id="*"))):
             where = str(path.relative_to(root))

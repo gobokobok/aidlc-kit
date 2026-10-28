@@ -19,5 +19,8 @@ aidlc = "aidlc.cli:main"
 [tool.setuptools.packages.find]
 include = ["aidlc*"]
 
+[tool.setuptools.package-data]
+aidlc = ["templates/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

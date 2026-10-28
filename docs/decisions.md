@@ -39,9 +39,11 @@ Newest last. Each entry: date, decision, alternatives rejected, why.
 ## 2026-10-28: When an edit creates a new version
 
 - **Decision:** `apply_edit` bumps the version (and clears approvals) only if
-  the current version has been reviewed: status `in_review`, `approved` or
-  `rejected`, or it holds an approval for the current version. Edits to an
-  unreviewed draft keep the version number.
+  the current version has been reviewed: status `in_review`, `approved`,
+  `rejected` or `stale`, or it holds an approval for the current version.
+  Edits to an unreviewed draft keep the version number. (Updated in step 2:
+  `stale` overwrites the earlier status, so a stale item counts as reviewed;
+  an extra version is cheaper than an edit slipping past review.)
 - **Rejected:** bumping on every save.
 - **Why:** approvals and parent links pin a version, so a version must be
   frozen once anyone has reviewed it. Before that, bumping on every save only
@@ -118,3 +120,55 @@ Newest last. Each entry: date, decision, alternatives rejected, why.
 - **Why:** with one PM, `pm_peer` can never be satisfied, so no discovery could
   be approved; with no data owner, no Tier 3 feature could pass. The config
   check warns about both situations.
+
+## 2026-10-28: `workspace.py` holds feature and artifact operations
+
+- **Decision:** creating features and artifacts, editing, revising risk and
+  working out the next step live in `aidlc/workspace.py` (files only).
+  `cli.py` drives Git through `gitops.py` around those calls; `review.py`
+  plans who to ask and writes the PR description.
+- **Why:** keeps Git out of the logic so it is tested on plain folders, and
+  keeps `cli.py` to argument parsing and plain-language output.
+
+## 2026-10-28: `feature.yaml` per feature
+
+- **Decision:** each feature folder has `feature.yaml` (id, title, owner,
+  created_at), written by `/new-feature` and checked by the validator.
+- **Why:** the feature's name and owner are not any one artifact's to hold.
+
+## 2026-10-28: `/change` moves parent links to current versions
+
+- **Decision:** editing an artifact relinks its parents to their current
+  versions. `aidlc change <ID>` with no new text is how a stale item is
+  brought up to date.
+- **Rejected:** a separate relink command.
+- **Why:** the PM edits in light of the current parents; any reviewed item
+  becomes a new version anyway, so reviewers see the change.
+
+## 2026-10-28: Direct edits in the IDE are turned into new versions
+
+- **Decision:** before every command, pending work is auto-committed. If a
+  file of an already reviewed version was edited by hand, it is first turned
+  into a new version (approvals cleared) and the PM is told.
+- **Why:** PMs will edit Markdown directly; otherwise an old approval would
+  silently cover new content.
+
+## 2026-10-28: `/privacy` command
+
+- **Decision:** add `/privacy` (CLI `aidlc privacy`) to write the privacy
+  assessment that Tier 3 requires.
+- **Why:** the update requires the artifact but names no command to create it.
+
+## 2026-10-28: Who is "me", and working without GitHub
+
+- **Decision:** the current user is `$AIDLC_USER` if set, else `gh api user`.
+  Without an `origin` remote, `/submit` marks items in review and says no
+  review request could be sent.
+- **Why:** `$AIDLC_USER` serves CI and tests; the local mode lets a team try
+  the kit before connecting GitHub.
+
+## 2026-10-28: Slash commands share one rules file
+
+- **Decision:** `.claude/aidlc-rules.md` holds the rules every command follows
+  (call the CLI, never Git; relay results in plain sentences; drafts via
+  stdin). It sits outside `.claude/commands/` so it is not a command itself.
