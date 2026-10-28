@@ -4,7 +4,7 @@ type: discovery
 feature: FEAT-001
 title: Guests wait too long for a reply to simple requests
 version: 1
-status: draft
+status: in_review
 owner: gobokobok
 parents: []
 approvals: []

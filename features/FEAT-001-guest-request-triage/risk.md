@@ -4,7 +4,7 @@ type: risk
 feature: FEAT-001
 title: Risk profile
 version: 1
-status: draft
+status: in_review
 owner: gobokobok
 parents: []
 approvals: []

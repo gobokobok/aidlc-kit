@@ -4,7 +4,7 @@ type: asset
 feature: FEAT-001
 title: Guest message triage prompt
 version: 1
-status: draft
+status: in_review
 owner: gobokobok
 parents:
   - {id: AC-001, version: 1}

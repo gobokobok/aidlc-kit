@@ -4,7 +4,7 @@ type: eval
 feature: FEAT-001
 title: Golden set
 version: 1
-status: draft
+status: in_review
 owner: gobokobok
 parents:
   - {id: AC-001, version: 1}
