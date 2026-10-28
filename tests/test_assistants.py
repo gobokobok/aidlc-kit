@@ -32,10 +32,11 @@ def test_neutral_source_names_no_vendor():
         assert not VENDORS.search(path.read_text()), path.name
 
 
-def test_shipped_code_only_names_vendors_in_the_adapters():
-    adapters = PACKAGE / "assistants" / "__init__.py"
+def test_shipped_code_only_names_vendors_in_adapters_and_providers():
+    allowed = [PACKAGE / "assistants" / "__init__.py", PACKAGE / "evals" / "providers"]
     for path in PACKAGE.rglob("*"):
-        if path.is_file() and path.suffix in (".py", ".md", ".yaml") and path != adapters:
+        if path.is_file() and path.suffix in (".py", ".md", ".yaml", ".yml") \
+                and not any(path == a or a in path.parents for a in allowed):
             assert not VENDORS.search(path.read_text()), path
 
 
@@ -48,7 +49,7 @@ def test_every_cli_call_in_prompts_is_a_real_command():
 
 def test_commands_cover_the_cli_workflow():
     names = {c.name for c in asst.load_commands()}
-    assert names == {"new-feature", "discover", "requirement", "criteria", "asset", "privacy", "approve", "reject",
+    assert names == {"new-feature", "discover", "requirement", "criteria", "asset", "privacy", "approve", "reject", "eval",
                      "change", "risk", "submit", "reviewers", "status"}
     assert all(c.description for c in asst.load_commands())
 

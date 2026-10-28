@@ -50,7 +50,8 @@ def test_pm_journey_without_seeing_git(env):
     assert any(c[1:3] == ["pr", "edit"] and "--body" in c for c in env.gh.calls)
 
     code, out = env("status")
-    assert "Waiting for reviewers" in out
+    assert "Evals: no golden set yet" in out
+    assert out.strip().endswith("Run /eval to build the golden set and test the prompt against the criteria.")
 
 
 def test_change_after_review_makes_new_version_and_stales_children(env):

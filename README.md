@@ -4,9 +4,10 @@ Take a feature from discovery to an engineering-ready handoff from your IDE,
 in plain language, without touching Git, with whichever AI assistant you
 already use, or none.
 
-> Work in progress. Build steps 1 to 3 of 8 are done: artifact model,
+> Work in progress. Build steps 1 to 4 of 8 are done: artifact model,
 > validator, risk tiers, reviewer routing, CLI, chat commands for several
-> assistants, review and approval, CODEOWNERS, CI checks and the audit log.
+> assistants, review and approval, CODEOWNERS, CI checks, the audit log and
+> golden-set evals.
 > Full setup and demo instructions arrive with step 8.
 
 ## Set up a repository
@@ -30,9 +31,26 @@ replaced when you run `init` again. `init` also writes the CI workflows and
 the AIDLC part of `.github/CODEOWNERS`.
 
 Then, on GitHub, protect `main`: require a pull request with 1 approval and
-code owner review, require the checks `validate` and `approvals_complete`,
+code owner review, require the checks `validate`, `eval` and `approvals_complete`,
 and let GitHub Actions bypass the pull request rule so the `audit` job can
 append to the audit log.
+
+## Live evals (optional)
+
+CI runs evals from saved model answers only: no API key, no cost. To create
+those answers, someone runs `/eval --live` once per prompt change. Configure
+the provider in `aidlc.yaml` and install its SDK:
+
+```yaml
+eval:
+  provider: anthropic          # or openai, openai_compatible (with base_url)
+  model: claude-opus-5-5
+  api_key_env: ANTHROPIC_API_KEY
+```
+
+```bash
+pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
+```
 
 ## Commands so far
 
@@ -46,6 +64,7 @@ append to the audit log.
 | `/privacy` | `aidlc privacy` | Write the privacy assessment (Tier 3) |
 | `/risk` | `aidlc risk` | Show or revise the risk profile |
 | `/change` | `aidlc change <ID>` | Edit an item; reviewed items get a new version |
+| `/eval` | `aidlc golden`, `aidlc eval [--live]` | Save the golden set and test the prompt against the criteria |
 | `/submit` | `aidlc submit` | Send drafts for review and ask the right people |
 | `/approve` | `aidlc approve [ID ...]` | Reviewer: approve what is waiting for your role |
 | `/reject` | `aidlc reject ID --reason ...` | Reviewer: reject and say what must change |

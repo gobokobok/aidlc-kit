@@ -99,6 +99,9 @@ def load_feature(feature_dir: Path, root: Path) -> tuple[str | None, list[Artifa
     for a_type, pattern in LOCATIONS.items():
         for path in sorted(feature_dir.glob(pattern.format(id="*"))):
             where = str(path.relative_to(root))
+            implied = _expected_id(a_type, path.relative_to(feature_dir))
+            if implied is not None and not art.ARTIFACT_ID_RE.match(implied):
+                continue  # not named like an artifact, e.g. evals/report.md
             try:
                 a = art.load(path)
             except ArtifactError as exc:
@@ -110,7 +113,7 @@ def load_feature(feature_dir: Path, root: Path) -> tuple[str | None, list[Artifa
                     f"file is stored as a {a_type} but says `type: {a.type}`",
                 ))
                 continue
-            expected = _expected_id(a_type, path.relative_to(feature_dir))
+            expected = implied
             if expected is not None and expected != a.id:
                 issues.append(Issue(
                     "error", where, f"file location says {expected} but the file says `id: {a.id}`",
@@ -214,6 +217,9 @@ def check_feature(items: list[Artifact], config: Config | None = None) -> list[I
 
         if a.type == "criteria" and "thresholds" not in a.extra:
             warn("criteria has no thresholds; the defaults in aidlc.yaml will apply")
+        if a.type == "asset":
+            for problem in check_asset_settings(a.extra):
+                err(problem)
 
     feature = items[0].feature if items else ""
     if items and not any(a.type == "risk" for a in items):
@@ -224,6 +230,48 @@ def check_feature(items: list[Artifact], config: Config | None = None) -> list[I
             if needed not in present:
                 issues.append(Issue("warning", feature, (
                     f"{tier.display} needs a {needed.replace('_', ' ')}; none exists yet")))
+    return issues
+
+
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def check_asset_settings(extra: dict) -> list[str]:
+    """Model settings an asset may carry for the eval runner."""
+    problems = []
+    if "model" in extra and (not isinstance(extra["model"], str) or not extra["model"].strip()):
+        problems.append("model must be a model name")
+    mt = extra.get("max_tokens")
+    if mt is not None and (isinstance(mt, bool) or not isinstance(mt, int) or mt < 1):
+        problems.append("max_tokens must be a whole number of 1 or more")
+    if extra.get("effort") is not None and extra["effort"] not in EFFORTS:
+        problems.append(f"effort must be one of: {', '.join(EFFORTS)}")
+    t = extra.get("temperature")
+    if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or not 0 <= t <= 2):
+        problems.append("temperature must be a number between 0 and 2")
+    return problems
+
+
+def check_golden(feature_dir: Path, root: Path, items: list[Artifact]) -> list[Issue]:
+    """golden.yaml is valid, and matches what the eval artifact recorded."""
+    from aidlc.evals import runner
+
+    golden = feature_dir / "evals" / runner.GOLDEN_FILE
+    where = str(golden.relative_to(root))
+    evals = [a for a in items if a.type == "eval"]
+    if not golden.is_file():
+        return [Issue("error", _label(a), f"{runner.GOLDEN_FILE} is missing") for a in evals]
+    text = golden.read_text(encoding="utf-8")
+    _, problems = runner.parse_golden(text, {a.id for a in items if a.type == "criteria"},
+                                      {a.id for a in items if a.type == "asset"})
+    issues = [Issue("error", where, p) for p in problems]
+    if not evals:
+        issues.append(Issue("warning", where, "is not recorded yet; run /eval to save it"))
+    for a in evals:
+        if a.extra.get("golden_sha256") != runner.golden_sha(text):
+            issues.append(Issue("error", _label(a), (
+                f"{runner.GOLDEN_FILE} changed since v{a.version} was saved; "
+                "run `aidlc golden` (or /eval) to record the change")))
     return issues
 
 
@@ -243,6 +291,7 @@ def load_repo(root: Path) -> tuple[list[Artifact], list[Issue]]:
             ))
         seen_features.setdefault(feature_id, fdir)
         items.extend(loaded)
+        issues.extend(check_golden(fdir, root, loaded))
     return items, issues
 
 

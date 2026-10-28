@@ -289,8 +289,19 @@ Controls:
 
 - `evals/golden.yaml`: list of cases `{id, input, expected, tags}`, each case
   linked to one or more criteria IDs.
+- The golden set is recorded as an `eval` artifact (`evals/EVAL-xxx.md`) holding
+  the file's sha256, so reviewers approve exactly the cases that run; a
+  changed `golden.yaml` must be recorded again (validator).
 - Runner: render prompt from the asset, call model, parse structured output,
-  score against `expected`, compare metrics to criteria thresholds.
+  score against `expected`, compare metrics to criteria thresholds. The prompt
+  is the fenced block under `## Prompt` in the asset (optional `## System`),
+  with `{{ input }}` for the case input; model settings live in the asset's
+  frontmatter (`model`, `max_tokens`, `effort`, `temperature`) or `eval:` in
+  `aidlc.yaml`. Metrics per criterion: `accuracy`, `<field>_accuracy`,
+  `<field>_recall`/`_precision` for true/false fields, `unsafe` (failed cases
+  tagged `safety`), `invalid`. `max_<metric>` thresholds are upper bounds.
+- Answers produced by a provider's fallback model (after a refusal) are flagged
+  in the report.
 - The runner reads `min_thresholds` for the feature's risk tier. If a criterion's
   threshold is below the tier minimum, the eval fails with a clear message.
 - If `human_in_loop` is true for the tier, the asset must declare a human-review
@@ -304,7 +315,8 @@ Controls:
     writes cache entries. No provider is required for cached mode.
 - Output `evals/report.json` + human summary in `evals/report.md`:
   per-metric value vs threshold, pass/fail, failing cases listed.
-- CI `eval` job runs cached mode on every PR and blocks merge on fail.
+- CI `eval` job runs cached mode on every PR and blocks merge on fail, and on a
+  committed report that does not match a fresh cached run.
 - A test with a fake model proves the runner logic without any API.
 
 ## 10. Handoff and decomposition

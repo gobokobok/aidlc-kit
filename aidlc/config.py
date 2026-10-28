@@ -25,6 +25,7 @@ REQUIRED_TIERS = ("T1", "T2", "T3")
 ROLE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 TIER_RE = re.compile(r"^T(\d+)$")
 TIER_FIELDS = {"label", "extra_reviewers", "required_artifacts", "min_thresholds", "human_in_loop"}
+EVAL_FIELDS = {"provider", "model", "api_key_env", "base_url"}
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class Config:
     review_routing: dict[str, tuple[str, ...]] = field(default_factory=dict)
     risk_tiers: dict[str, Tier] = field(default_factory=lambda: dict(DEFAULT_TIERS))
     thresholds: dict[str, float] = field(default_factory=dict)
+    evals: dict[str, str] = field(default_factory=dict)  # the `eval:` section
 
     def tier(self, name: str) -> Tier:
         return self.risk_tiers[name]
@@ -166,6 +168,18 @@ def check_config(raw: Any) -> list[Issue]:
     if "thresholds" in raw:
         issues.extend(check_thresholds(raw["thresholds"], where))
 
+    evals = raw.get("eval")
+    if evals is not None:
+        if not isinstance(evals, dict):
+            err("eval must be a set of settings (provider, model, api_key_env, base_url)")
+        else:
+            unknown = set(evals) - EVAL_FIELDS
+            if unknown:
+                err(f"eval: unknown setting(s) {', '.join(sorted(unknown))}")
+            for key in set(evals) & EVAL_FIELDS:
+                if evals[key] is not None and not isinstance(evals[key], str):
+                    err(f"eval.{key} must be text")
+
     if not any(i.severity == "error" for i in issues):
         for role, needed_by in used.items():
             if role == PM_PEER:
@@ -197,6 +211,7 @@ def _build(raw: dict[str, Any]) -> Config:
             for name, spec in sorted(tiers.items(), key=lambda kv: tier_rank(kv[0]))
         },
         thresholds=dict(raw.get("thresholds") or {}),
+        evals={k: v for k, v in (raw.get("eval") or {}).items() if v is not None},
     )
 
 

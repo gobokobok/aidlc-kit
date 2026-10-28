@@ -19,6 +19,8 @@ from aidlc import artifacts as art
 from aidlc import assistants, audit, blocks, ci, review, reviewers, risk, workspace
 from aidlc.artifacts import Artifact, ArtifactError
 from aidlc.config import CONFIG_FILE, Config, find_root, load_config, parse_config
+from aidlc.evals import model as eval_model
+from aidlc.evals import runner
 from aidlc.gitops import MAIN_BRANCH, GitError, GitOps, commit_message, feature_branch
 from aidlc.validate import load_feature, refresh_statuses, validate_repo
 from aidlc.workspace import Feature, WorkspaceError
@@ -293,7 +295,7 @@ NEXT_AFTER_CREATE = {
     "discovery": "Next: run /requirement to say what the system must do.",
     "requirement": "Add more with /requirement, or run /criteria to make it testable.",
     "criteria": "Add more with /criteria, or run /asset to define the AI behaviour.",
-    "asset": "Next: run /submit to ask for a review (evals arrive with /eval).",
+    "asset": "Next: run /eval to test it against the criteria.",
     "privacy_assessment": "Next: run /submit so the reviewers can check it.",
 }
 
@@ -305,6 +307,8 @@ def create_extra(args: argparse.Namespace) -> dict[str, Any]:
         extra["thresholds"] = thresholds
     if getattr(args, "human_review_step", None):
         extra["human_review_step"] = args.human_review_step.strip()
+    if getattr(args, "set_model", None):
+        extra["model"] = args.set_model.strip()
     return extra
 
 
@@ -501,13 +505,24 @@ def cmd_status(ctx: Ctx, args: argparse.Namespace) -> int:
         last = latest_rejection(a)
         if a.status == "rejected" and last:
             ctx.say(f"  {'':<14} {last['by']} said: {last['reason']}")
+    state = runner.report_state(feature.path / "evals", items, tier)
+    ctx.say(f"  Evals: {EVAL_STATE_WORDS[state]}")
     problems = feature_problems(ctx, feature)
     if problems:
         ctx.say(f"{len(problems)} problem(s) need fixing:")
         for i in problems:
             ctx.say(f"  ✗ {i.where}: {i.message}")
-    ctx.say(workspace.next_step(items, tier, ctx.config))
+    ctx.say(workspace.next_step(items, tier, ctx.config, state))
     return 0
+
+
+EVAL_STATE_WORDS = {
+    "none": "no golden set yet",
+    "missing": "golden set saved, not run yet",
+    "out_of_date": "the last run is out of date",
+    "failing": "failing (see evals/report.md)",
+    "passing": "passing",
+}
 
 
 def latest_rejection(a: Artifact) -> dict | None:
@@ -534,7 +549,8 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
         ctx.ops.commit(["features"], commit_message(
             feature.id, "Submit for review: " + ", ".join(f"{a.id} v{a.version}" for a in submitted)))
     elif not any(a.status == "in_review" for a in items):
-        ctx.say("There is nothing new to submit. " + workspace.next_step(items, tier, ctx.config))
+        state = runner.report_state(feature.path / "evals", items, tier)
+        ctx.say("There is nothing new to submit. " + workspace.next_step(items, tier, ctx.config, state))
         return 0
 
     if not ctx.ops.has_remote():
@@ -552,6 +568,118 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
     ctx.ops.request_reviewers(pr.number, [r.person for r in plan.requests])
     ctx.say(review.reviewer_message(plan, tier) + f" Review request: {pr.url}")
     ctx.say("Next: wait for approvals; /reviewers shows who still has to approve what.")
+    return 0
+
+
+# --- evals -----------------------------------------------------------------
+
+def cmd_golden(ctx: Ctx, args: argparse.Namespace) -> int:
+    feature = open_feature(ctx, args.feature)
+    saved = workspace.save_golden(ctx.root, feature, current_user(ctx), ctx.now, read_body(ctx, args.file))
+    a = saved.artifact
+    if not saved.changed:
+        ctx.say(f"The golden set is unchanged ({saved.cases} cases in {a.id} v{a.version}). Next: run /eval.")
+        return 0
+    ctx.ops.commit(["features"], commit_message(feature.id, f"Save golden set ({saved.cases} cases)", a.id, a.version))
+    ctx.say(f"Saved the golden set: {saved.cases} cases, recorded as {a.id} v{a.version}. Next: run /eval.")
+    return 0
+
+
+def run_feature_eval(ctx: Ctx, feature: Feature, live: bool) -> dict:
+    items = workspace.artifacts_of(ctx.root, feature)
+    evals_dir = feature.path / "evals"
+    golden = evals_dir / runner.GOLDEN_FILE
+    if not golden.is_file():
+        raise WorkspaceError("There is no golden set yet. Draft the cases and save them with /eval first.")
+    cache = eval_model.Cache(evals_dir / runner.CACHE_DIR)
+    if live:
+        settings = ctx.config.evals
+        client = eval_model.live_client(cache, eval_model.load_provider(settings.get("provider", "")),
+                                        settings, ctx.now)
+    else:
+        client = eval_model.cached_client(cache)
+    return runner.run(feature.id, items, golden.read_text(encoding="utf-8"), ctx.config, tier_of(ctx, items),
+                      client, "live" if live else "cached", ctx.now)
+
+
+def eval_summary(report: dict) -> str:
+    parts = []
+    for c in report["criteria"]:
+        checks = ", ".join(f"{k['metric']} {k['value'] if k['value'] is not None else 'n/a'} "
+                           f"(needs {'≤' if k['op'] == '<=' else '≥'} {k['limit']})" for k in c["checks"])
+        parts.append(f"{c['id']} {checks}" if checks else c["id"])
+    head = "Evals pass" if report["pass"] else "Evals fail"
+    text = f"{head}: {'; '.join(parts)}."
+    misses = [e for e in report["errors"] if "no cached answer" in e]
+    other = [e for e in report["errors"] if e not in misses]
+    if misses:
+        text += (f" {len(misses)} case(s) have no saved answer for this exact prompt yet; a live run "
+                 "(/eval --live) asks the model and costs money.")
+    if other:
+        text += " Problems: " + "; ".join(other[:3]) + ("; …" if len(other) > 3 else "") + "."
+    for c in report["criteria"]:
+        for p in c["problems"]:
+            if "no golden cases" in p or "minimum" in p:
+                text += f" {p[0].upper()}{p[1:]}."
+    if report["failing_cases"]:
+        text += f" {len(report['failing_cases'])} failing case(s) are listed in evals/report.md."
+    if report.get("answered_by_fallback_model"):
+        text += (" Some answers came from a fallback model after a refusal: "
+                 + ", ".join(report["answered_by_fallback_model"]) + ".")
+    return text
+
+
+def cmd_eval(ctx: Ctx, args: argparse.Namespace) -> int:
+    if args.check:
+        return eval_check(ctx, args)
+    feature = open_feature(ctx, args.feature)
+    if args.live:
+        n = len(runner.parse_golden((feature.path / "evals" / runner.GOLDEN_FILE).read_text(encoding="utf-8"))[0]) \
+            if (feature.path / "evals" / runner.GOLDEN_FILE).is_file() else 0
+        ctx.say(f"Asking {ctx.config.evals.get('provider') or 'the model'} for {n} case(s)…")
+    # Record the golden set first, so its eval artifact links to the versions being run.
+    saved = None
+    if (feature.path / "evals" / runner.GOLDEN_FILE).is_file():
+        saved = workspace.save_golden(ctx.root, feature, current_user(ctx), ctx.now)
+    report = run_feature_eval(ctx, feature, args.live)
+    runner.write_report(feature.path / "evals", report)
+    summary = f"Eval run ({report['mode']}): {'pass' if report['pass'] else 'fail'}"
+    if saved and saved.changed:
+        ctx.ops.commit(["features"], commit_message(feature.id, summary, saved.artifact.id, saved.artifact.version))
+    else:
+        ctx.ops.commit(["features"], commit_message(feature.id, summary))
+    ctx.say(eval_summary(report))
+    if report["pass"]:
+        ctx.say("Next: run /submit so reviewers see the results with the items.")
+    return 0 if report["pass"] else 1
+
+
+def eval_check(ctx: Ctx, args: argparse.Namespace) -> int:
+    """CI: re-run every golden set from cache and compare with the committed report."""
+    features = workspace.list_features(ctx.root) if args.all else [resolve_feature(ctx, args.feature)]
+    failed = 0
+    checked = 0
+    for feature in features:
+        if not (feature.path / "evals" / runner.GOLDEN_FILE).is_file():
+            continue
+        checked += 1
+        fresh = run_feature_eval(ctx, feature, live=False)
+        committed = runner.read_report(feature.path / "evals")
+        if committed is None:
+            ctx.say(f"  ✗ {feature.id}: there is no committed eval report; run /eval.")
+            failed += 1
+        elif runner.stable(committed) != runner.stable(fresh):
+            ctx.say(f"  ✗ {feature.id}: evals/report.json does not match a fresh run; run /eval and commit.")
+            failed += 1
+        elif not fresh["pass"]:
+            ctx.say(f"  ✗ {feature.id}: {eval_summary(fresh)}")
+            failed += 1
+        else:
+            ctx.say(f"  ✓ {feature.id}: {eval_summary(fresh)}")
+    if failed:
+        ctx.say(f"eval: {failed} feature(s) failing; merging is blocked until they pass.")
+        return 1
+    ctx.say(f"eval: {checked} feature(s) checked, all passing." if checked else "eval: no golden sets yet.")
     return 0
 
 
@@ -804,6 +932,7 @@ def add_content_flags(p: argparse.ArgumentParser, a_type: str | None) -> None:
                        help="e.g. accuracy=0.9; repeat for more")
     if a_type in (None, "asset"):
         p.add_argument("--human-review-step", help="who checks the AI output before it takes effect")
+        p.add_argument("--set-model", help="model the eval runner uses for this prompt")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -819,6 +948,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-commit", action="store_true", help="write the files but do not commit them")
     p.add_argument("--install", default=ci.DEFAULT_INSTALL, help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_init)
+
+    p = sub.add_parser("golden", help="save the golden set (test cases) and record it")
+    p.add_argument("--feature")
+    p.add_argument("--file", help="cases as YAML; '-' reads standard input (default: re-record golden.yaml)")
+    p.set_defaults(func=cmd_golden)
+
+    p = sub.add_parser("eval", help="run the golden set and write the eval report")
+    p.add_argument("--feature")
+    p.add_argument("--live", action="store_true", help="ask the configured model (costs money) and save answers")
+    p.add_argument("--check", action="store_true", help="CI: re-run from saved answers, compare with the report")
+    p.add_argument("--all", action="store_true", help="with --check: every feature")
+    p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("approve", help="approve items waiting for your review")
     p.add_argument("ids", nargs="*", help="item IDs (default: everything waiting for you)")
@@ -923,7 +1064,7 @@ def main(
               out or sys.stdout, stdin or sys.stdin)
     try:
         return args.func(ctx, args)
-    except (WorkspaceError, GitError, assistants.SetupError) as exc:
+    except (WorkspaceError, GitError, assistants.SetupError, eval_model.EvalError) as exc:
         ctx.say(str(exc))
         if args.verbose and getattr(exc, "detail", ""):
             ctx.say(exc.detail)

@@ -266,3 +266,52 @@ Supersedes "Slash commands share one rules file" above.
   artifacts, so it records nothing and does not loop.
 - **Trade-off:** `main` must let GitHub Actions bypass the PR rule. That is a
   setup step the docs must spell out (limitations).
+
+## 2026-10-28: The golden set is a reviewed artifact
+
+- **Decision:** `evals/golden.yaml` holds the cases; `evals/EVAL-001.md` records
+  its sha256 and links to the criteria it covers and the assets it runs.
+  Changing the file without recording it is a validation error; recording a
+  reviewed golden set makes a new version.
+- **Why:** the cases define "correct", so they need the same review and
+  traceability as the criteria; the hash stops a quiet edit after approval.
+
+## 2026-10-28: Cache key and what counts as current
+
+- **Decision:** the cache key is sha256 of provider, model, max_tokens,
+  effort, temperature, asset ID@version and the fully rendered system and user
+  prompt (the spec's "model + prompt version + rendered input", made stricter).
+  A report is current only for the asset and criteria versions, golden sha and
+  tier it ran with. CI re-runs every golden set from cache and fails if the
+  committed report differs, so a report cannot be hand-edited to pass.
+
+## 2026-10-28: Tier minimums apply even when a criterion is silent
+
+- **Decision:** a criterion threshold looser than the tier's `min_thresholds`
+  fails the eval with a message saying how to fix it; a tier minimum the
+  criterion does not mention is added to its checks. Criteria without
+  thresholds use the `aidlc.yaml` defaults. A criterion with no cases fails.
+
+## 2026-10-28: Live providers through official SDKs, as optional extras
+
+- **Decision:** `eval.provider` is `anthropic`, `openai` or `openai_compatible`
+  (with `base_url` for Azure OpenAI, gateways or local servers). Each provider
+  module imports its vendor SDK only when called (`aidlc-kit[anthropic]`,
+  `aidlc-kit[openai]`). Vendor names appear only in `aidlc/evals/providers/`
+  and the assistant adapters (enforced by a test).
+- **Anthropic specifics:** sampling parameters are not sent (the Messages API
+  rejects them since 2026-10-21); server-side refusal fallbacks are enabled
+  (`fallbacks: "default"`) and answers served by a fallback model are flagged in
+  the report, since they may not reflect the configured model.
+- **Rejected:** raw HTTP clients (we would re-implement retries and error
+  types); a required vendor dependency.
+- **Not verified:** no live call has been made; providers are tested against
+  stand-in SDK modules.
+
+## 2026-10-28: Expected answers come from people, not the model
+
+- **Decision:** the `/eval` prompt tells the assistant to take expected values
+  from the PM and the documents and never to fill them in by running the
+  model; live runs (which cost money) need the PM's go-ahead.
+- **Why:** a golden set copied from model output only proves the model agrees
+  with itself.

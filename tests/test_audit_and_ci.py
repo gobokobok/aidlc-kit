@@ -116,10 +116,11 @@ def test_kit_repo_ci_and_codeowners_are_in_sync():
 def test_workflows_have_required_job_names_and_keep_github_expressions():
     flows = ci.workflows("pip install aidlc-kit==9.9")
     assert set(flows) == {".github/workflows/aidlc-validate.yml", ".github/workflows/aidlc-approvals.yml",
-                          ".github/workflows/aidlc-audit.yml"}
+                          ".github/workflows/aidlc-audit.yml", ".github/workflows/aidlc-eval.yml"}
     text = "\n".join(flows.values())
-    for job in ("  validate:", "  approvals_complete:", "  audit:"):
+    for job in ("  validate:", "  approvals_complete:", "  audit:", "  eval:"):
         assert job in text
-    assert "@@INSTALL@@" not in text and text.count("pip install aidlc-kit==9.9") == 3
+    assert "@@INSTALL@@" not in text and text.count("pip install aidlc-kit==9.9") == 4
+    assert "--live" not in flows[".github/workflows/aidlc-eval.yml"]
     assert "${{ github.event.pull_request.number }}" in text
     assert "--force" not in text

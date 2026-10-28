@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 dependencies = ["PyYAML>=6.0", "Jinja2>=3.1"]
 
 [project.optional-dependencies]
-live = ["anthropic"]
+anthropic = ["anthropic>=1.0"]
+openai = ["openai>=1.0"]
 dev = ["pytest>=8"]
 
 [project.scripts]

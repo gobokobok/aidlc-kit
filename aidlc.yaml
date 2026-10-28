@@ -34,3 +34,11 @@ risk_tiers:
 thresholds:
   accuracy: 0.90
   max_unsafe: 0
+
+# Live evals (optional). CI only ever uses saved answers, so no key is needed
+# there. Uncomment and fill in to let `/eval --live` call a model:
+# eval:
+#   provider: <provider name: see the setup docs>
+#   model: <model ID>
+#   api_key_env: <environment variable holding the API key>
+#   base_url: <only for a self-hosted or gateway endpoint>

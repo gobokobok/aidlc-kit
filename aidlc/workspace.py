@@ -24,8 +24,8 @@ from aidlc.validate import FEATURE_FILE, FEATURES_DIR, StatusChange, load_featur
 TEMPLATES = Path(__file__).parent / "templates"
 
 # Order artifacts are normally written in, for summaries.
-STAGES = ("risk", "discovery", "requirement", "criteria", "asset", "privacy_assessment",
-          "eval", "handoff", "decomposition")
+STAGES = ("risk", "discovery", "requirement", "criteria", "asset", "eval", "privacy_assessment",
+          "handoff", "decomposition")
 
 DEFAULT_TITLES = {"risk": "Risk profile", "privacy_assessment": "Privacy assessment"}
 
@@ -406,6 +406,68 @@ def revise_risk(
     return RiskRevision(before, after, tier_before, risk.effective_tier(after, config), computed, reasons)
 
 
+# --- golden set ----------------------------------------------------------
+
+@dataclass(frozen=True)
+class GoldenSave:
+    artifact: Artifact
+    changed: bool
+    cases: int
+
+
+def save_golden(root: Path, feature: Feature, owner: str, now: datetime,
+                text: str | None = None) -> GoldenSave:
+    """Write golden.yaml (when `text` is given) and record it in the eval
+    artifact: its hash, the criteria and assets it covers, a summary. A
+    reviewed golden set that changes becomes a new version."""
+    from aidlc.evals import runner  # local: evals depends on workspace-free modules only
+
+    evals_dir = feature.path / "evals"
+    golden = evals_dir / runner.GOLDEN_FILE
+    items = artifacts_of(root, feature)
+    criteria = {a.id for a in items if a.type == "criteria"}
+    assets = sorted(a.id for a in items if a.type == "asset")
+    if text is None:
+        if not golden.is_file():
+            raise WorkspaceError("There is no golden set yet; draft the cases first.")
+        text = golden.read_text(encoding="utf-8")
+    text = text.strip("\n") + "\n"
+    cases, problems = runner.parse_golden(text, criteria, set(assets))
+    if problems:
+        more = f" (and {len(problems) - 5} more)" if len(problems) > 5 else ""
+        raise WorkspaceError("The golden set needs fixing: " + "; ".join(problems[:5]) + more + ".")
+    evals_dir.mkdir(parents=True, exist_ok=True)
+    golden.write_text(text, encoding="utf-8")
+
+    covered = sorted({c for case in cases for c in case.criteria})
+    by_id = trace.index(items)
+    parents = tuple(ParentRef(i, by_id[i].version) for i in covered + assets)
+    per_criterion = [f"{cid}: {sum(cid in c.criteria for c in cases)} case(s)" for cid in covered]
+    missing = sorted(criteria - set(covered))
+    per_criterion += [f"{cid}: no cases yet" for cid in missing]
+    tags = sorted({t for c in cases for t in c.tags})
+    sha = runner.golden_sha(text)
+    ctx = dict(cases=len(cases), per_criterion=per_criterion, tags=", ".join(tags) or "none")
+
+    existing = next((a for a in items if a.type == "eval"), None)
+    if existing is None:
+        new_id = art.next_id("eval", used_ids(root, feature, items))
+        a = render("eval", id=new_id, feature=feature.id, title="Golden set", owner=owner, now=now,
+                   parents=[{"id": r.id, "version": r.version} for r in parents],
+                   extra={"golden_sha256": sha}, **ctx)
+        a = replace(a, path=feature.path / art.relative_path("eval", new_id))
+        art.save(a)
+        return GoldenSave(a, True, len(cases))
+    if existing.extra.get("golden_sha256") == sha and existing.parents == parents:
+        return GoldenSave(existing, False, len(cases))
+    body = render("eval", id=existing.id, feature=feature.id, title=existing.title, owner=existing.owner,
+                  now=now, parents=[], extra={}, **ctx).body
+    after = art.apply_edit(existing, now, parents=parents, body=body,
+                           extra={**existing.extra, "golden_sha256": sha})
+    art.save(after)
+    return GoldenSave(after, True, len(cases))
+
+
 # --- hand edits ----------------------------------------------------------
 
 def _content(a: Artifact) -> tuple:
@@ -435,8 +497,18 @@ def normalize_hand_edits(root: Path, changed: list[tuple[Path, str | None]], now
 
 # --- state ---------------------------------------------------------------
 
-def next_step(items: list[Artifact], tier: Tier | None, config: Config) -> str:
-    """The one thing the PM should do next, in a sentence."""
+EVAL_STEPS = {
+    "none": "Run /eval to build the golden set and test the prompt against the criteria.",
+    "missing": "Run /eval: the golden set has not been run yet.",
+    "out_of_date": "Run /eval: the prompt, criteria or golden set changed since the last run.",
+    "failing": "Evals fail (see evals/report.md): improve the prompt or the cases, then /eval again.",
+}
+
+
+def next_step(items: list[Artifact], tier: Tier | None, config: Config,
+              eval_state: str = "passing") -> str:
+    """The one thing the PM should do next, in a sentence. `eval_state` is
+    runner.report_state(...) for the feature."""
     present = {a.type for a in items}
     for a_type, command, what in (
         ("risk", "/risk", "answer the risk questions"),
@@ -451,19 +523,24 @@ def next_step(items: list[Artifact], tier: Tier | None, config: Config) -> str:
         for needed in tier.required_artifacts:
             if needed not in present:
                 return f"{tier.display} needs a {needed.replace('_', ' ')}: run /privacy."
-    stale = [a.id for a in items if a.status == "stale"]
+    # A stale golden set is brought up to date by /eval itself.
+    stale = [a.id for a in items if a.status == "stale" and a.type != "eval"]
     if stale:
         return f"Update {', '.join(stale)} with /change: something they build on has changed."
+    if eval_state == "passing" and any(a.type == "eval" and a.status == "stale" for a in items):
+        eval_state = "out_of_date"
     rejected = [a.id for a in items if a.status == "rejected"]
     if rejected:
         return f"Address the review comments on {', '.join(rejected)} with /change, then /submit."
+    if eval_state in EVAL_STEPS:
+        return EVAL_STEPS[eval_state]
     if any(a.status == "draft" for a in items):
         return "Run /submit to ask for a review."
     waiting = [a for a in items if a.status == "in_review"
                or (a.status == "approved" and not reviewers.roles_complete(config, a, tier))]
     if waiting:
         return "Waiting for reviewers; run /reviewers to see who still has to approve what."
-    return "Everything is approved. Next: /eval, then /handoff."
+    return "Everything is approved and the evals pass. Next: /handoff."
 
 
 def sort_key(a: Artifact) -> tuple[int, str]:
