@@ -1,10 +1,10 @@
 ---
 description: Write a requirement (what the system must do)
-argument-hint: <what you want it to do>
+argument_hint: <what you want it to do>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Run `aidlc status` to see the feature, and read its `discovery.md`.
 2. Run `aidlc template requirement` and draft one requirement per distinct

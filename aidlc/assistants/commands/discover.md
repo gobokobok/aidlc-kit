@@ -1,10 +1,10 @@
 ---
 description: Write the discovery brief (why we are doing this)
-argument-hint: <notes, interview findings, data, or a file path>
+argument_hint: <notes, interview findings, data, or a file path>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Read what the PM gave you (and any files they point to).
 2. Run `aidlc template discovery` and draft the brief under those headings in

@@ -1,10 +1,10 @@
 ---
 description: Show or revise the feature's risk profile and tier
-argument-hint: <what changed, or empty to show the profile>
+argument_hint: <what changed, or empty to show the profile>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. With no input, run `aidlc risk` and explain the tier and why in plain words.
 2. Otherwise work out which answers changed (run `aidlc risk-questions` for

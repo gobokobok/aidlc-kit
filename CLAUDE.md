@@ -1,11 +1,14 @@
 # CLAUDE.md: AIDLC Starter Kit
 
-Build spec and working rules for Claude Code. Read fully before writing code.
+Build spec and working rules for whoever builds the kit (here: Claude Code).
+Read fully before writing code. This file is not shipped: companies install the
+kit as a package and `aidlc init` writes the files their own assistant needs.
 
 ## 1. Purpose
 
 A starter kit that lets Product Managers take a feature from discovery to an
-engineering-ready handoff **from their IDE, in plain language, without touching Git**.
+engineering-ready handoff **from their IDE, in plain language, without touching Git**,
+using whichever AI assistant their company already has.
 Underneath, the kit handles versioning, ownership, review and approval, audit
 history, traceability, golden-set evaluation and the engineering handoff.
 
@@ -19,7 +22,7 @@ Keep the product generic: no company names. Display name is set in `aidlc.yaml`
 
 | Role | Does | Where |
 |---|---|---|
-| PM | Authors artifacts via chat commands | IDE (VS Code + Claude Code) |
+| PM | Authors artifacts via chat commands | IDE (VS Code or similar) with any supported assistant |
 | Reviewer | Approves or rejects; must differ from author | IDE command or GitHub PR screen |
 | Engineer | Picks up handoff, decomposes into technical tasks | IDE |
 | Viewer | Reads status, trace, audit, eval results | Deployed static site |
@@ -33,8 +36,10 @@ Keep the product generic: no company names. Display name is set in `aidlc.yaml`
 4. Approver ≠ author, always.
 5. Audit history is append-only.
 6. The model drafts; people decide. Generated content is a draft until approved.
-7. Commands are thin wrappers over a plain Python CLI, so any IDE assistant or
-   VS Code task can drive the same workflow (no lock-in to Claude Code).
+7. Assistant-neutral. All rules live in a plain Python CLI; chat commands are
+   thin wrappers generated per assistant from one neutral source (section 5a).
+   No assistant, model or vendor is required: VS Code tasks or a terminal can
+   drive the same workflow, and governance never depends on the model behaving.
 8. Deterministic by default: evals run from cached model outputs in CI; live
    model calls are opt-in.
 
@@ -59,17 +64,20 @@ Keep the product generic: no company names. Display name is set in `aidlc.yaml`
 
 Every command ends by telling the PM, in one or two plain sentences, what
 happened and what the next step is. Never show raw Git output unless asked.
+How the PM invokes a command depends on their assistant (section 5a); the
+names above are the same everywhere.
 
 ## 5. Repository layout
 
 ```
 aidlc.yaml                  # kit config: display name, people, review routing,
                             #   risk tiers, thresholds defaults
-CLAUDE.md
+CLAUDE.md                   # this build spec (not shipped)
 README.md
-.claude/commands/*.md       # slash commands (thin: call the CLI, then explain)
-aidlc/                      # Python package
+aidlc/                      # Python package (what ships)
   cli.py                    # entry point: `aidlc <command>`
+  assistants/               # neutral command prompts + rules, and the adapters
+                            #   that render them per assistant (`aidlc init`)
   artifacts.py              # load/save/validate frontmatter, IDs, versions
   trace.py                  # parent links, staleness, trace graph
   gitops.py                 # all Git/gh calls live here and only here
@@ -92,6 +100,34 @@ tests/
 .github/workflows/          # validate, eval, audit, deploy-site
 .github/CODEOWNERS          # generated from aidlc.yaml by `aidlc sync-codeowners`
 ```
+
+The kit repository does not commit generated assistant files; they are
+produced in the adopting company's repository.
+
+### 5a. Distribution and assistants
+
+The kit ships as a Python package (`pip install aidlc-kit`). In the adopting
+company's repository, whoever sets it up runs once:
+
+```
+aidlc init --assistant <name> [--assistant <name> ...]
+```
+
+`init` writes `aidlc.yaml` (if missing), `features/`, and the files for each
+chosen assistant. Rerunning it updates them. It never overwrites a company's
+own instructions: in shared files it only replaces a marked AIDLC block.
+
+| `--assistant` | Writes | PM invokes |
+|---|---|---|
+| `claude` | `.claude/commands/*.md`, AIDLC block in `CLAUDE.md` | `/new-feature` |
+| `copilot` | `.github/prompts/*.prompt.md`, AIDLC block in `.github/copilot-instructions.md` | `/new-feature` in Copilot Chat |
+| `cursor` | `.cursor/commands/*.md`, `.cursor/rules/aidlc.mdc` | `/new-feature` |
+| `agents` | AIDLC block in `AGENTS.md` (read by many assistants) | Plain request ("start a new feature") |
+| `vscode` | AIDLC tasks in `.vscode/tasks.json` | Run Task, fill in input boxes |
+
+All of these are rendered from one neutral source in `aidlc/assistants/`
+(command prompts + shared working rules), so wording stays identical across
+assistants. The neutral source names no assistant or vendor.
 
 ## 6. Artifact model
 
@@ -221,7 +257,8 @@ Controls:
 - Before any operation: auto-commit pending work, pull with rebase, and on
   conflict stop and explain in plain language. Never force-push.
 - One-time setup (documented): `gh auth login`, Python 3.12. This is the only
-  Git-adjacent thing a PM does, once.
+  Git-adjacent thing a PM does, once. Installing the kit and `aidlc init` are
+  done once per repository by whoever sets it up.
 
 ## 8. Review, approval, audit
 
@@ -252,7 +289,10 @@ Controls:
 - Model client modes:
   - `cached` (default, CI): reads `evals/cache/<hash>.json`; hash = sha256 of
     model + prompt version + rendered input. Missing cache entry = test error, not a pass.
-  - `live`: Anthropic API via `ANTHROPIC_API_KEY`; writes cache entries.
+  - `live`: calls the provider configured in `aidlc.yaml` (`anthropic`,
+    `openai`, or any OpenAI-compatible endpoint such as Azure OpenAI or a
+    local model); API key from an environment variable named in config;
+    writes cache entries. No provider is required for cached mode.
 - Output `evals/report.json` + human summary in `evals/report.md`:
   per-metric value vs threshold, pass/fail, failing cases listed.
 - CI `eval` job runs cached mode on every PR and blocks merge on fail.
@@ -314,8 +354,10 @@ Tier 3 (extra privacy assessment, stricter threshold).
   reviewer routing model
 - `workflow.md`: PM journey and engineer journey, step by step, incl. the
   intake risk step and reviewer routing
+- `setup.md`: installing the kit and `aidlc init` for each supported assistant,
+  plus the no-assistant path (VS Code tasks, terminal)
 - `trade-offs.md`: Git as store vs database; static viewer vs app; cached vs
-  live evals; Claude Code commands vs plain CLI; soft vs hard gates;
+  live evals; assistant adapters vs plain CLI; soft vs hard gates;
   self-declared risk (mitigated by risk reviewer challenge, not eliminated);
   process enforcement here versus platform controls (RBAC, data access, AI
   gateway) elsewhere
@@ -325,17 +367,21 @@ Tier 3 (extra privacy assessment, stricter threshold).
   replace technical data controls)
 - `demo.md`: a 5-minute demo script
 
-README: what it is, 3-step setup, demo walkthrough, links to site and docs.
+README: what it is, 3-step setup (install, `aidlc init --assistant <name>`,
+`gh auth login`), demo walkthrough, links to site and docs.
 
 ## 14. Engineering conventions
 
-- Python 3.12, few dependencies: PyYAML, Jinja2, anthropic (optional), pytest.
+- Python 3.12, few dependencies: PyYAML, Jinja2, pytest; provider SDKs only as
+  optional extras for live evals.
 - All Git and `gh` calls go through `gitops.py`; tests mock it.
 - Type hints; small pure functions; no global state.
 - Tests for: frontmatter validation, staleness, approver ≠ owner, handoff gate,
   audit append-only check, eval scoring, site build, tier computation, role
   resolution (including `pm_peer`), required roles with tier extras, CODEOWNERS
-  generation and drift check, tier lowering blocked, extended handoff gate.
+  generation and drift check, tier lowering blocked, extended handoff gate,
+  assistant adapters (rendering, `init` idempotent, company content preserved,
+  neutral source names no vendor, every command calls a real CLI command).
 - No secrets in the repo. No personal data in examples.
 - Log significant design decisions in `docs/decisions.md` (date, decision,
   alternatives rejected, why).
@@ -344,11 +390,13 @@ README: what it is, 3-step setup, demo walkthrough, links to site and docs.
 
 1. Skeleton, `aidlc.yaml`, artifact model + validator + tests; `risk` type,
    risk and reviewer config schema, validation
-2. CLI commands + slash commands + `gitops.py`; `/new-feature` questionnaire,
-   `/risk`, `/reviewers`, `/submit` reviewer messaging
+2. CLI commands + `gitops.py`; `/new-feature` questionnaire, `/risk`,
+   `/reviewers`, `/submit` reviewer messaging; neutral command source,
+   assistant adapters and `aidlc init`
 3. Review, approval, audit, `sync-codeowners`, CI `validate`, `approvals_complete`
-   and `audit` (with tier and role fields)
-4. Eval runner, cache, CI `eval`, tier minimum thresholds
+   and `audit` (with tier and role fields); `init` also writes CODEOWNERS and
+   the CI workflows
+4. Eval runner, cache, CI `eval`, tier minimum thresholds, live-eval providers
 5. Handoff gate (extended for risk) + bundle, `/decompose`
 6. Worked example end to end (Tier 2, plus Tier 3 variant in docs)
 7. Viewer site + Pages deploy, tier badges and reviewer markers
@@ -358,7 +406,10 @@ After each step: run tests, commit, and state what works and what is next.
 
 ## 16. Definition of done
 
-- A PM can run `/new-feature` through `/handoff` without seeing Git.
+- A PM can run `/new-feature` through `/handoff` without seeing Git, from any
+  supported assistant (Claude Code, Copilot, Cursor, AGENTS.md readers) or from
+  VS Code tasks with no assistant at all.
+- Nothing shipped requires a particular AI vendor; cached evals need no API key.
 - CI blocks merge on invalid artifacts, stale links, self-approval or failing evals.
 - Audit log is append-only and enforced.
 - Example feature passes CI and appears on the deployed site.

@@ -1,7 +1,7 @@
 ---
 description: Send the feature's drafts for review
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
 1. Run `aidlc submit`.
 2. If it lists problems, explain each in plain words and offer to fix them.

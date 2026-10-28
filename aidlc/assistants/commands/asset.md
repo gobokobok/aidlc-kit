@@ -1,10 +1,10 @@
 ---
 description: Define the AI behaviour (prompt and configuration)
-argument-hint: <what the AI should do>
+argument_hint: <what the AI should do>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Run `aidlc status`; read the criteria and `risk.md`.
 2. Run `aidlc template asset` and draft the prompt, the exact output format,

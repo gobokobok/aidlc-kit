@@ -1,8 +1,9 @@
 """Command-line entry point: `aidlc <command>`.
 
 Every command ends with one or two plain sentences: what happened and what
-to do next. Git output is never shown unless `--verbose` is given. Slash
-commands in `.claude/commands/` are thin wrappers over these commands.
+to do next. Git output is never shown unless `--verbose` is given. The chat
+commands that `aidlc init` writes for each assistant are thin wrappers over
+these commands.
 """
 
 import argparse
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aidlc import artifacts as art
-from aidlc import review, reviewers, risk, workspace
+from aidlc import assistants, review, reviewers, risk, workspace
 from aidlc.artifacts import Artifact
 from aidlc.config import Config, find_root, load_config
 from aidlc.gitops import MAIN_BRANCH, GitError, GitOps, commit_message, feature_branch
@@ -494,6 +495,28 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_init(ctx: Ctx, args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    names = list(dict.fromkeys(args.assistant or []))
+    written = assistants.init(root, names)
+    changed = [w for w in written if w.action != "unchanged"]
+    for w in changed:
+        ctx.say(f"  {w.action} {w.path}")
+    ops = GitOps(root) if ctx.ops.root != root else ctx.ops
+    if changed and not args.no_commit and ops.is_repo():
+        ops.commit([w.path for w in changed],
+                   commit_message("AIDLC", f"Set up AIDLC Kit for {review.join(names)}"))
+        saved = "and saved them"
+    else:
+        saved = "(not committed)" if changed else ""
+    head = f"Set up AIDLC Kit for {review.join(names)}" + (f" {saved}" if saved else "") + "."
+    if not changed:
+        head = f"AIDLC Kit for {review.join(names)} was already up to date."
+    ctx.say(head + " Next: put your team in aidlc.yaml, run `aidlc validate`, and have each "
+            "person run `gh auth login` once. Then a PM can start with /new-feature.")
+    return 0
+
+
 # --- wiring --------------------------------------------------------------
 
 def add_answer_flags(p: argparse.ArgumentParser) -> None:
@@ -521,6 +544,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", default=".", help="repository folder (default: current folder)")
     parser.add_argument("--verbose", action="store_true", help="show Git details when something fails")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("init", help="set up this repository for the kit and your AI assistant(s)")
+    p.add_argument("--assistant", action="append", choices=sorted(assistants.ASSISTANTS),
+                   help="repeat for several: " + "; ".join(
+                       f"{a.name} = {a.summary}" for a in assistants.ASSISTANTS.values()))
+    p.add_argument("--no-commit", action="store_true", help="write the files but do not commit them")
+    p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("validate", help="check every artifact in the repository")
     p.add_argument("--write", action="store_true", help="write computed stale/draft statuses first")
@@ -587,7 +617,7 @@ def main(
               out or sys.stdout, stdin or sys.stdin)
     try:
         return args.func(ctx, args)
-    except (WorkspaceError, GitError) as exc:
+    except (WorkspaceError, GitError, assistants.SetupError) as exc:
         ctx.say(str(exc))
         if args.verbose and getattr(exc, "detail", ""):
             ctx.say(exc.detail)

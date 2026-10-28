@@ -1,10 +1,10 @@
 ---
 description: Edit an artifact; reviewed items get a new version and downstream items go stale
-argument-hint: <artifact ID and what to change>
+argument_hint: <artifact ID and what to change>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Find the artifact (`aidlc status`) and read its file.
 2. Draft the edited text, keeping the template headings. Show the PM the

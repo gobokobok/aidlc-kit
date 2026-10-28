@@ -1,10 +1,10 @@
 ---
 description: Write acceptance criteria with measurable AI thresholds
-argument-hint: <requirement ID and what "done" means>
+argument_hint: <requirement ID and what "done" means>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Run `aidlc status`; read the requirement(s) concerned and the feature's
    `risk.md` (its tier sets minimum thresholds, listed under "What this tier requires").

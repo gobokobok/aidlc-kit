@@ -172,3 +172,33 @@ Newest last. Each entry: date, decision, alternatives rejected, why.
 - **Decision:** `.claude/aidlc-rules.md` holds the rules every command follows
   (call the CLI, never Git; relay results in plain sentences; drafts via
   stdin). It sits outside `.claude/commands/` so it is not a command itself.
+
+## 2026-10-28: Assistant-neutral: package + `aidlc init` + generated adapters
+
+Supersedes "Slash commands share one rules file" above.
+
+- **Decision:** the kit ships as a Python package. In the adopting repository,
+  `aidlc init --assistant <name>` (repeatable) writes `aidlc.yaml` if missing,
+  `features/`, and the files each chosen assistant reads: Claude Code,
+  GitHub Copilot in VS Code, Cursor, `AGENTS.md`, or VS Code tasks for no
+  assistant at all. All are rendered from one neutral source in
+  `aidlc/assistants/` (11 command prompts + working rules) that names no
+  vendor; a test enforces that, and that every prompt calls a real CLI
+  command. Shared files (`CLAUDE.md`, `AGENTS.md`,
+  `.github/copilot-instructions.md`, `.vscode/tasks.json`) are never
+  overwritten: only a marked AIDLC block, or tasks labelled `AIDLC:`, are
+  replaced. The kit repository commits no generated assistant files, and
+  its own `CLAUDE.md` is the build spec, which does not ship.
+- **Rejected:** a template repository companies copy (it would carry our
+  build spec and our assistant's files); hand-maintained files per assistant
+  (wording drifts apart).
+- **Why:** companies use whatever assistant they already have. All rules
+  live in the CLI, so governance is identical everywhere and never depends
+  on the model behaving; only drafting quality varies.
+- **Formats** (checked 2026-10-28): Copilot prompt files in
+  `.github/prompts/*.prompt.md` with `description`, `argument-hint`,
+  `agent: agent`; Cursor commands as plain Markdown in `.cursor/commands/`
+  with always-on rules in `.cursor/rules/*.mdc`. Cursor documents no argument
+  placeholder, so non-Claude prompts describe the PM's input in words.
+- **Not yet:** live evals are still specified per provider in step 4; `init`
+  will also write CODEOWNERS and CI workflows from step 3.

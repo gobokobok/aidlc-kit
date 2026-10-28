@@ -1,10 +1,10 @@
 ---
 description: Write the privacy assessment (required at higher risk tiers)
-argument-hint: <what data the feature uses and how>
+argument_hint: <what data the feature uses and how>
 ---
-Follow the rules in `.claude/aidlc-rules.md`.
+{{ rules_ref }}
 
-Input from the PM: $ARGUMENTS
+Input from the PM: {{ args }}
 
 1. Read `risk.md` and `discovery.md` for the feature.
 2. Run `aidlc template privacy` and draft each section from the input. Mark
