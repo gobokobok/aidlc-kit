@@ -21,6 +21,7 @@ from aidlc.artifacts import Artifact, ArtifactError
 from aidlc.config import CONFIG_FILE, Config, find_root, load_config, parse_config
 from aidlc.evals import model as eval_model
 from aidlc.evals import runner
+from aidlc.site import build as site_build
 from aidlc.gitops import (MAIN_BRANCH, GitError, GitOps, commit_message, decompose_branch, feature_branch,
                           feature_of_branch)
 from aidlc.validate import load_feature, refresh_statuses, validate_repo
@@ -995,6 +996,17 @@ def cmd_sync_ci(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_site_build(ctx: Ctx, args: argparse.Namespace) -> int:
+    in_git = ctx.ops.is_repo()
+    tags = ctx.ops.tags("*/handoff-v*") if in_git else []
+    commit = ctx.ops.head_sha() if in_git else None
+    out = Path(args.out)
+    out = out if out.is_absolute() else ctx.root / out
+    files = site_build.build(ctx.root, out, tags, ctx.now, commit, args.source_url)
+    ctx.say(f"Built the viewer site: {len(files)} files in {args.out}. Open {args.out}/index.html to look at it.")
+    return 0
+
+
 def approvals_result(ctx: Ctx, pr: int, base: str) -> tuple[review.CheckResult, list[str]]:
     """The `approvals_complete` check for a pull request against `base`."""
     ops = ctx.ops
@@ -1190,6 +1202,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sync-ci", help="write or update the CI workflows and CODEOWNERS")
     p.add_argument("--install", default=ci.DEFAULT_INSTALL, help="command CI uses to install the kit")
     p.set_defaults(func=cmd_sync_ci)
+
+    p = sub.add_parser("site", help="build the read-only viewer site")
+    site_sub = p.add_subparsers(dest="site_command", required=True)
+    q = site_sub.add_parser("build", help="write the static pages")
+    q.add_argument("--out", default="site", help="folder to write (default: site)")
+    q.add_argument("--source-url", help="repository address, e.g. https://github.com/acme/repo, to link items")
+    q.set_defaults(func=cmd_site_build)
 
     p = sub.add_parser("approvals-check", help="CI: every required role approved (approvals_complete)")
     p.add_argument("--pr", type=int, required=True)

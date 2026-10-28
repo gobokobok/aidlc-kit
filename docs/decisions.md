@@ -426,3 +426,33 @@ Supersedes "Slash commands share one rules file" above.
 - **Rejected:** a personal access token in the workflow (it would act as the
   owner and carry far more access than the audit job needs); skipping
   protection (the point is that checks and approvals can block a merge).
+
+## 2026-10-28: Viewer site
+
+- **Decision:** `aidlc site build` renders plain HTML with Jinja2 into a folder
+  (default `site/`, not committed), from the same functions the CLI uses
+  (`validate`, the handoff gate, reviewer roles, the eval report, the audit
+  log), so the site cannot disagree with `/status`. Pages: features overview,
+  feature detail (stages, blockers, risk profile, items with ✓ or … per
+  required reviewer role), trace graph, eval results, audit timeline.
+- **Decision:** the site is built from `main` only. Work on a branch or an open
+  PR does not appear until it is merged. Handoff state comes from the
+  `FEAT-xxx/handoff-vN` tags, so the Pages job checks out full history.
+- **Decision:** no JavaScript and no framework. The trace graph is inline SVG
+  with the same information as a text list of chains under it, for phones and
+  screen readers. Colour is never the only signal: statuses are words, and
+  reviewer markers are ✓ and … plus the role name.
+- **Decision:** artifact text is escaped by the template engine; the site
+  shows titles, statuses and approvals, not the bodies of artifacts. Item IDs
+  link to the file on GitHub when `--source-url` is given.
+- **Decision:** styling follows the owner's "Monochrome Console" guideline
+  (one blue accent, hairline cards, Schibsted Grotesk and Fragment Mono from
+  Google Fonts with system fallbacks). The fonts are the only outside request;
+  a site served inside a closed network falls back to system fonts.
+- **Rejected:** a single-page app (a backend-free read-only view does not need
+  one); rendering artifact bodies as Markdown (needs a Markdown library or a
+  hand-rolled renderer and widens what can be injected); committing the built
+  site (it is generated output).
+- **Fixed on the way:** `.gitignore` listed `site/`, which also hid
+  `aidlc/site/`; it is now `/site/`.
+- **Not done:** the Pages deployment has not run on real GitHub (see below).

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Features · {{ site.name }}{% endblock %}
+{% block body %}
+<h1>Features</h1>
+<p class="sub">{{ site.features | length }} feature{{ '' if site.features | length == 1 else 's' }} in this repository.</p>
+<div class="lead">
+{% for f in site.features %}
+<a class="card" href="features/{{ f.id }}/index.html">
+  <div class="row"><span class="id">{{ f.id }}</span>{{ m.tier(f) }}{% if f.handed_off %}<span class="chip">handed off</span>{% endif %}</div>
+  <div class="t">{{ f.title }}</div>
+  {{ m.stages(f) }}
+  <div class="meta">
+    {% if f.blockers %}{{ f.blockers | length }} item{{ '' if f.blockers | length == 1 else 's' }} in the way of handoff · {% endif %}{{ f.next_step }}
+  </div>
+</a>
+{% else %}
+<div class="empty">No features yet. A PM starts one with /new-feature.</div>
+{% endfor %}
+</div>
+{% endblock %}

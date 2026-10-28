@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Audit · {{ site.name }}{% endblock %}
+{% block body %}
+<h1>Audit timeline</h1>
+<p class="sub">One entry each time an item reached <span class="mono">main</span>. Written by CI and append-only.</p>
+{% for f in site.features %}
+<h2 id="{{ f.id }}">{{ f.id }} · {{ f.title }}</h2>
+{% for e in f.audit %}
+<div class="card">
+  <div class="row"><span class="id">{{ e.id }} v{{ e.version }}</span>{{ m.status(e.status) }}<span class="chip mono">{{ e.tier }}</span>
+    <span class="mono muted">{{ e.at }}</span></div>
+  <div class="meta">
+    {{ e.actor }} merged it{% if e.approvers %} · approved by {{ e.approvers | join(', ') }}{% endif %}
+    {% if e.roles_satisfied %} · roles: {{ e.roles_satisfied | join(', ') }}{% endif %}
+    {% if e.pr %} · {% if site.source_url %}<a href="{{ site.source_url }}/pull/{{ e.pr }}">PR {{ e.pr }}</a>{% else %}PR {{ e.pr }}{% endif %}{% endif %}
+    {% if e.commit %} · {% if site.source_url %}<a class="mono" href="{{ site.source_url }}/commit/{{ e.commit }}">{{ e.commit[:7] }}</a>{% else %}<span class="mono">{{ e.commit[:7] }}</span>{% endif %}{% endif %}
+  </div>
+</div>
+{% else %}
+<div class="empty">Nothing recorded yet. Entries appear after the feature is merged to main.</div>
+{% endfor %}
+{% else %}
+<div class="empty">No features yet.</div>
+{% endfor %}
+{% endblock %}

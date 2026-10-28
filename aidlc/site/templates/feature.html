@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ f.id }} {{ f.title }} · {{ site.name }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="{{ root }}index.html">Features</a> / {{ f.id }}</div>
+<div class="title-row"><h1>{{ f.title }}</h1>{{ m.tier(f) }}</div>
+<p class="sub">Owner {{ f.owner }}.{% if f.handed_off %} Handed off as {{ f.handed_off | join(', ') }}.{% endif %}</p>
+{{ m.tabs(f, 'overview', root) }}
+{{ m.stages(f) }}
+
+<h2>Next step</h2>
+<p class="next">{{ f.next_step }}</p>
+
+{% if f.problems %}
+<h2>Problems found</h2>
+{% for p in f.problems %}<div class="card error">{{ p }}</div>{% endfor %}
+{% endif %}
+
+<h2>Blocking handoff</h2>
+{% if f.blockers %}
+{% for b in f.blockers %}
+<div class="card"><div class="row"><span class="id">{{ b.where }}</span></div><div class="t">{{ b.problem }}</div><div class="meta">{{ b.who }}</div></div>
+{% endfor %}
+{% elif f.handed_off %}
+<div class="empty">Nothing: this feature was handed off.</div>
+{% else %}
+<div class="empty">Nothing is in the way. The feature can be handed off.</div>
+{% endif %}
+
+{% if f.risk_facts %}
+<h2>Risk profile · {{ f.tier_text }}</h2>
+<dl class="facts">{% for k, v in f.risk_facts %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
+{% endif %}
+
+<h2>Items and who must approve them</h2>
+{% for a in f.artifacts %}
+<div class="card" id="{{ a.id }}">
+  <div class="row">
+    <span class="id">{% if site.source_url and a.path %}<a href="{{ site.source_url }}/blob/main/{{ a.path }}">{{ a.id }}</a>{% else %}{{ a.id }}{% endif %} v{{ a.version }}</span>
+    <span class="chip">{{ a.type_label }}</span>{{ m.status(a.status) }}
+  </div>
+  <div class="t">{{ a.title }}</div>
+  <div class="meta">Owner {{ a.owner }} · updated {{ a.updated }}</div>
+  {% if a.note %}<div class="meta bad">{{ a.note }}</div>{% endif %}
+  {% if a.roles %}
+  <ul class="roles" aria-label="Required reviewers for {{ a.id }}">
+    {% for r in a.roles %}<li class="{{ 'ok' if r.satisfied else 'wait' }}"><span class="m" aria-hidden="true">{{ '✓' if r.satisfied else '…' }}</span><span class="sr">{{ 'approved' if r.satisfied else 'waiting' }}: </span>{{ r.label }}{% if r.people %} ({{ r.people | join(', ') }}){% endif %}{% if r.added_by %} · {{ r.added_by }}{% endif %}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endfor %}
+<p class="legend">✓ approved for this version · … still waiting (names are who approved, or who could). A role marked with a tier was added by that tier.</p>
+{% endblock %}

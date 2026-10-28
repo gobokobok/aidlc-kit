@@ -4,11 +4,11 @@ Take a feature from discovery to an engineering-ready handoff from your IDE,
 in plain language, without touching Git, with whichever AI assistant you
 already use, or none.
 
-> Work in progress. Build steps 1 to 6 of 8 are done: artifact model,
+> Work in progress. Build steps 1 to 7 of 8 are done: artifact model,
 > validator, risk tiers, reviewer routing, CLI, chat commands for several
 > assistants, review and approval, CODEOWNERS, CI checks, the audit log,
-> golden-set evals, the handoff gate and package, technical plans, and a
-> worked example.
+> golden-set evals, the handoff gate and package, technical plans, a
+> worked example, and the read-only viewer site.
 > Full setup and demo instructions arrive with step 8.
 
 **Worked example.** `features/FEAT-001-guest-request-triage/` is a complete
@@ -83,6 +83,16 @@ pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
 | `/reject` | `aidlc reject ID --reason ...` | Reviewer: reject and say what must change |
 | `/reviewers` | `aidlc reviewers` | Who still has to approve what |
 | `/status` | `aidlc status` | Where the feature stands and what is next |
+
+## The viewer site
+
+`aidlc site build --out site` writes a read-only site: every feature with its
+risk tier badge and stage, who still has to approve each item (✓ approved, …
+waiting), what blocks handoff, the trace from discovery to tasks, eval
+results, and the audit timeline. It is plain HTML with light and dark mode and
+works on a phone; open `site/index.html`. The `AIDLC site` workflow publishes
+it to GitHub Pages after each merge to `main` (set Pages > Source to
+"GitHub Actions" once).
 
 ## Development
 

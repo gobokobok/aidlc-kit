@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Evals · {{ f.id }} · {{ site.name }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="{{ root }}index.html">Features</a> / <a href="{{ root }}features/{{ f.id }}/index.html">{{ f.id }}</a> / Evals</div>
+<div class="title-row"><h1>{{ f.title }}</h1>{{ m.tier(f) }}</div>
+{{ m.tabs(f, 'evals', root) }}
+
+{% set r = f.report %}
+<h2>Result</h2>
+{% if not r %}
+<div class="empty">No eval report yet. Run /eval to test the prompt against the criteria.</div>
+{% else %}
+<div class="card{% if not r['pass'] %} error{% endif %}">
+  <div class="t">{{ 'Passing' if r['pass'] else 'Failing' }}{% if f.eval_state == 'out_of_date' %} · out of date{% endif %}</div>
+  <div class="meta">
+    {{ r.golden.cases }} cases · {{ r.mode }} answers from {{ r.provider or 'saved answers' }}{% for a in r.assets %} · {{ a.id }} v{{ a.version }}{% if a.model %} on {{ a.model }}{% endif %}{% endfor %}
+    · tier {{ r.tier }} · run {{ r.generated_at }} · golden set {{ r.golden.sha256[:8] }}
+  </div>
+  {% if r.answered_by_fallback_model %}<div class="meta bad">Some answers came from a fallback model after a refusal: {{ r.answered_by_fallback_model | join(', ') }}.</div>{% endif %}
+  {% for e in r.errors %}<div class="meta bad">{{ e }}</div>{% endfor %}
+</div>
+
+{% for c in r.criteria %}
+<h2>{{ c.id }} v{{ c.version }} · {{ c.title }}</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Measure</th><th>Needs</th><th>Got</th><th>Result</th></tr></thead>
+    <tbody>
+    {% for k in c.checks %}
+    <tr><td>{{ k.metric | replace('_', ' ') }}</td><td class="n">{{ '≤' if k.op == '<=' else '≥' }} {{ k.limit }}</td>
+        <td class="n">{{ k.value if k.value is not none else 'n/a' }}</td>
+        <td>{% if k['pass'] %}✓ met{% else %}<span class="bad">✗ not met</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% for p in c.problems %}<div class="meta bad">{{ p }}</div>{% endfor %}
+</div>
+{% endfor %}
+
+<h2>Failing cases</h2>
+{% if r.failing_cases %}
+{% for c in r.failing_cases %}
+<div class="card"><div class="row"><span class="id">{{ c.id }}</span>{% for k in c.criteria %}<span class="chip mono">{{ k }}</span>{% endfor %}{% for tag in c.tags %}<span class="chip">{{ tag }}</span>{% endfor %}</div>
+<div class="t">{{ c.input if c.input is string else (c.input | tojson) }}</div>
+<div class="meta">expected {{ c.expected | tojson }} · got {% if c.refused %}a refusal{% elif c.error %}{{ c.error }}{% else %}{{ c.actual | tojson }}{% endif %}</div></div>
+{% endfor %}
+{% else %}
+<div class="empty">None. Every case in the golden set got the expected answer.</div>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,15 @@
+{% macro status(s) %}<span class="chip st-{{ s }}">{{ s | replace('_', ' ') }}</span>{% endmacro %}
+{% macro tier(f) %}{% if f.tier %}<span class="tier" title="{{ f.tier_text }}">{{ f.tier_text }}</span>{% else %}<span class="chip">No tier yet</span>{% endif %}{% endmacro %}
+{% macro stages(f) %}
+<div class="stages" role="list">
+{% for s in f.stages %}<div class="stage {{ s.state }}" role="listitem"><div class="l">{{ s.label }}</div><div class="d">{{ s.detail }}</div></div>{% endfor %}
+</div>
+{% endmacro %}
+{% macro tabs(f, current, root) %}
+<nav class="tabs" aria-label="{{ f.id }} pages">
+  <a href="{{ root }}features/{{ f.id }}/index.html"{% if current == 'overview' %} aria-current="page"{% endif %}>Overview</a>
+  <a href="{{ root }}features/{{ f.id }}/trace.html"{% if current == 'trace' %} aria-current="page"{% endif %}>Trace</a>
+  <a href="{{ root }}features/{{ f.id }}/evals.html"{% if current == 'evals' %} aria-current="page"{% endif %}>Evals</a>
+  <a href="{{ root }}audit.html#{{ f.id }}">Audit</a>
+</nav>
+{% endmacro %}

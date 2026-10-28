@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{% block title %}{{ site.name }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="{{ root }}style.css">
+</head>
+<body>
+<header class="top"><div class="in">
+  <a class="name" href="{{ root }}index.html">{{ site.name }}</a>
+  <nav aria-label="Main">
+    <a href="{{ root }}index.html"{% if section == 'features' %} aria-current="page"{% endif %}>Features</a>
+    <a href="{{ root }}audit.html"{% if section == 'audit' %} aria-current="page"{% endif %}>Audit</a>
+  </nav>
+</div></header>
+<main class="wrap{% if wide %} wide{% endif %}">
+{% block body %}{% endblock %}
+<footer><span>{{ site.name }} · read-only view of the repository</span><span>built {{ site.generated_at }}{% if site.commit %} · {{ site.commit[:7] }}{% endif %}</span></footer>
+</main>
+</body>
+</html>

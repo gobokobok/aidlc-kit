@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Trace · {{ f.id }} · {{ site.name }}{% endblock %}
+{% block body %}
+<div class="crumb"><a href="{{ root }}index.html">Features</a> / <a href="{{ root }}features/{{ f.id }}/index.html">{{ f.id }}</a> / Trace</div>
+<div class="title-row"><h1>{{ f.title }}</h1>{{ m.tier(f) }}</div>
+{{ m.tabs(f, 'trace', root) }}
+
+<h2>From discovery to tasks</h2>
+{% set g = f.graph %}
+<div class="scroll">
+<svg class="trace" role="img" aria-labelledby="tt" viewBox="0 0 {{ g.width }} {{ g.height }}" width="{{ g.width }}" height="{{ g.height }}">
+  <title id="tt">Each item points to what it builds on, from tasks back to the discovery brief.</title>
+  {% for c in g.columns %}<text class="col" x="{{ c.x }}" y="22">{{ c.label }}</text>{% endfor %}
+  {% for e in g.edges %}<path class="edge" d="{{ e.d }}"><title>{{ e['from'] }} builds on {{ e.to }}</title></path>{% endfor %}
+  {% for n in g.nodes %}
+  <g class="node s-{{ n.status }}{% if n.type == 'task' %} task{% endif %}" transform="translate({{ n.x }} {{ n.y }})">
+    <title>{{ n.id }}: {{ n.full }} ({{ n.status | replace('_', ' ') }})</title>
+    <rect width="{{ g.node_w }}" height="{{ g.node_h }}" rx="6"/>
+    <text class="nid" x="10" y="17">{{ n.label }}</text>
+    <text class="nt" x="10" y="34">{{ n.title }}</text>
+  </g>
+  {% endfor %}
+</svg>
+</div>
+<p class="legend">Lines run from an item to what it builds on. A solid dark outline is approved, blue is in review, dashed grey is a draft, red is stale or rejected. Tasks come from the technical plan.</p>
+
+<h2>Each criterion, back to the discovery brief</h2>
+{% for chain in f.chains %}
+<div class="card chain">{% for id in chain %}{% if not loop.first %}<span class="arrow">→</span>{% endif %}{{ id }}{% endfor %}</div>
+{% else %}
+<div class="empty">No criteria yet.</div>
+{% endfor %}
+{% endblock %}
