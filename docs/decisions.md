@@ -375,28 +375,34 @@ Supersedes "Slash commands share one rules file" above.
   must accept a technical plan). Add `decomposition:` to `review_routing` if
   that is more than you want.
 
-## 2026-10-28: Worked example is built by a script and recorded with a scripted stand-in
+## 2026-10-28: The worked example is recorded for real, on GitHub, with two accounts
 
-- **Decision:** `tools/build_example.py` rebuilds FEAT-001 by driving the real CLI
-  in a scratch repository (real Git, a local bare remote, an in-memory GitHub),
-  playing every role from this repository's `aidlc.yaml`, then copies `features/`
-  and `audit/log.jsonl` here. Re-run it after changing the people in `aidlc.yaml`
-  so the approvals match.
-- **Decision:** the model answers in the saved cache come from a scripted
-  stand-in (keyword rules in the builder), not a real model. It is named
-  `scripted-example` in `aidlc.yaml` (`eval.provider`) and `example-scripted-v1`
-  on the prompt, and the report's mode says "live" because that is the path it
-  took. To record real answers, set a real provider and model and run
-  `aidlc eval --live`; the saved answers then change, and the report and
-  reviews must be redone.
-- **Rejected:** writing the cache by hand as if a model had answered (it would
-  pass CI while claiming something false); leaving the example out until a
-  real API key exists (the chain would be untested, and the site and docs need
-  something real to show).
-- **Consequence:** the audit log and manifest in the example carry commit
-  numbers and PR numbers from the scratch run, which do not exist in this
-  repository's history. Once the kit lives on GitHub, running the same flow for
-  real replaces them.
-- **Decision:** the example keeps one failing golden case (G-019, a double
-  charge the keyword rules do not know) so the report shows a failing case
-  being listed while still meeting the thresholds.
+- **Decision:** FEAT-001 was written through the real CLI on the real repository
+  (`gobokobok/aidlc-kit`): a feature branch, PR 1 for the feature and its
+  handoff package, PR 2 for the technical plan, squash-merged, tagged
+  `FEAT-001/handoff-v1`, with the audit job writing `audit/log.jsonl` on `main`.
+  The drafts the PM fed in are kept in `examples/guest-request-triage/`.
+- **Decision:** two GitHub accounts, both controlled by the same person, stand in
+  for all roles: `gobokobok` (pm, engineer) writes everything, `alexdanm-oss`
+  (pm, ops, tech, risk, data owner, kit admin) approves. One approval satisfies
+  every role that account holds. This shows the mechanism, not independent
+  review. With a real team, spread the roles across people.
+- **Decision:** the saved model answers are from `claude-sonnet-5-5` through the
+  Anthropic provider (20 calls per run). The first run failed two cases
+  (a leak not marked urgent; a local-area question sent to front desk) because
+  the prompt did not match REQ-002 and did not define `other`. The prompt was
+  fixed, the golden set was not touched, the second run passed 20 of 20, and
+  the answers from the first prompt were removed from the cache. The failed run
+  stays in Git history. The prompt was shaped after seeing the failure; that is
+  ordinary prompt work, but it means 20 of 20 is not a blind score.
+- **Rejected:** a scripted stand-in recorded as if it were a model. An earlier
+  attempt did this offline; it was thrown away once a real key was available,
+  because cache entries must only ever hold answers a model gave.
+- **Observed on real GitHub:** `approvals_complete` passed using the reviews API,
+  the audit job appended to `main` without help, and the `tests` workflow of the
+  kit failed on both PRs while the example was incomplete. `submit` failed once
+  at "ask reviewers" right after the PR was created and worked on rerun; the
+  cause was not found, so `request_reviewers` now retries once after two seconds.
+- **Not done:** branch protection is not enabled on `main`, so the required
+  checks and code-owner review were demonstrated by the checks passing, not by
+  GitHub blocking a merge.

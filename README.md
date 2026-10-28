@@ -12,11 +12,13 @@ already use, or none.
 > Full setup and demo instructions arrive with step 8.
 
 **Worked example.** `features/FEAT-001-guest-request-triage/` is a complete
-Tier 2 feature: discovery, three requirements, two criteria, a prompt, a
-20-case golden set with saved answers, reviews including the risk reviewer, a
-handoff package and a technical plan. Its saved model answers come from a
-scripted stand-in, not a real model (see `docs/decisions.md`), so it needs no
-API key. `tools/build_example.py` rebuilds it. How the same feature changes at
+Tier 2 feature recorded on this repository: discovery, three requirements, two
+criteria, a prompt, a 20-case golden set with saved Claude answers, reviews
+including the risk reviewer, a handoff package, and a technical plan (see
+[PR 1](https://github.com/gobokobok/aidlc-kit/pull/1) and
+[PR 2](https://github.com/gobokobok/aidlc-kit/pull/2)). Two GitHub accounts
+play all the roles, so it shows the mechanism, not independent review. CI
+replays the saved answers and needs no API key. How the same feature changes at
 Tier 3: `docs/example-tier3.md`.
 
 ## Set up a repository

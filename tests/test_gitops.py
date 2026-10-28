@@ -102,3 +102,16 @@ def test_request_reviewers_dedupes():
     run = FakeRun()
     GitOps(Path("/repo"), run).request_reviewers(7, ["sam", "bob", "sam"])
     assert run.calls == [["gh", "pr", "edit", "7", "--add-reviewer", "bob,sam"]]
+
+
+def test_request_reviewers_retries_once(monkeypatch):
+    monkeypatch.setattr("aidlc.gitops.time.sleep", lambda s: None)
+    calls = []
+
+    def runner(args, cwd):
+        calls.append(args)
+        code = 1 if len(calls) == 1 else 0
+        return subprocess.CompletedProcess(args, code, "", "not found yet" if code else "")
+
+    GitOps(Path("."), runner).request_reviewers(1, ["bob"])
+    assert len(calls) == 2

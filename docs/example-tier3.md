@@ -53,10 +53,10 @@ Everything already approved stays approved, but handoff waits.
 1. `/privacy` writes PIA-001 (data involved, purpose and basis, minimisation,
    retention and access, risks), linked to the discovery brief and the risk
    profile. It needs Risk and Data owner approval like everything else.
-2. `/change AC-001` raises the accuracy threshold to 0.95. In the worked
-   example the scripted run scores 0.95, so there is no room left: the one
-   failing case (G-019) has to be fixed in the prompt or the case examined,
-   then `/eval --live` records new answers.
+2. `/change AC-001` raises the accuracy threshold to 0.95. The recorded
+   example already scores 1.0 on its 20 cases, so the new threshold would pass
+   once the criterion is reapproved. Twenty cases is a small sample: at this
+   tier the golden set should grow before the number means much.
 3. `/change ASSET-001 --human-review-step "..."` names who checks the output
    and when. For an AI that acts on its own this is usually a sampling review
    after the fact, so the PM and the data owner should agree on what that

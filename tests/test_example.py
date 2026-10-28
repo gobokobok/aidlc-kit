@@ -59,7 +59,11 @@ def test_example_golden_set_and_cached_evals(example):
     assert not problems and len(cases) == 20
     assert {c for case in cases for c in case.criteria} == {"AC-001", "AC-002"}
     report = json.loads((feature.path / "evals" / "report.json").read_text())
-    assert report["pass"] and report["provider"] == "scripted-example"
+    assert report["pass"] and report["provider"] == "anthropic"
+    for entry in (feature.path / "evals" / "cache").glob("*.json"):
+        saved = json.loads(entry.read_text())
+        assert saved["request"]["provider"] == "anthropic" and saved["served_by"].startswith("claude-")
+        assert not saved["fallback"]
     code, out = cli("eval", "--check", "--all")   # re-runs from the saved answers only
     assert code == 0, out
 

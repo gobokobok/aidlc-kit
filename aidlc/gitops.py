@@ -7,6 +7,7 @@ raw command output is kept on `.detail` for `--verbose`. Never force-pushes.
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ MAIN_BRANCH = "main"
 FEATURE_BRANCH_PREFIX = "feat/"
 DECOMPOSE_BRANCH_PREFIX = "decompose/"
 REMOTE = "origin"
+RETRY_SECONDS = 2
 
 Runner = Callable[[list[str], Path], subprocess.CompletedProcess]
 
@@ -332,6 +334,13 @@ class GitOps:
 
     def request_reviewers(self, number: int, users: Iterable[str]) -> None:
         users = sorted(set(users))
-        if users:
-            self._gh("pr", "edit", str(number), "--add-reviewer", ",".join(users),
-                     what="ask reviewers on GitHub")
+        if not users:
+            return
+        args = ("pr", "edit", str(number), "--add-reviewer", ",".join(users))
+        try:
+            self._gh(*args, what="ask reviewers on GitHub")
+        except GitError:
+            # Seen once on real GitHub right after the pull request was created;
+            # the same call succeeded a moment later.
+            time.sleep(RETRY_SECONDS)
+            self._gh(*args, what="ask reviewers on GitHub")
