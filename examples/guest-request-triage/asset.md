@@ -15,8 +15,12 @@ a person always confirms. Never write a reply to the guest.
 Sort the guest message below.
 
 Queues: housekeeping, maintenance, food_and_beverage, front_desk, other.
-Mark urgent as true only for danger to a person or the building, a medical
-need, a security problem, or a guest who is locked out of their room.
+Use other for anything that is not a request for one of the four teams, such
+as thanks, feedback, or questions about the area.
+Mark urgent as true only for danger to a person or the building (water leaks,
+flooding, gas, smoke, fire), a medical need, an allergic reaction, a security
+problem such as a door that will not lock, or a guest locked out of their
+room. A slow order, a warm room or a broken gadget is not urgent.
 Answer with one JSON object and nothing else, for example:
 {"category": "housekeeping", "urgent": false}
 
