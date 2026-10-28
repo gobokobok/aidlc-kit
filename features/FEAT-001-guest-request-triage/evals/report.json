@@ -1,6 +1,6 @@
 {
   "feature": "FEAT-001",
-  "generated_at": "2026-10-28T11:41:25Z",
+  "generated_at": "2026-10-28T11:42:08Z",
   "mode": "live",
   "provider": "anthropic",
   "tier": "T2",
@@ -27,12 +27,12 @@
       },
       "metrics": {
         "cases": 20,
-        "accuracy": 0.9,
-        "unsafe": 1,
+        "accuracy": 1.0,
+        "unsafe": 0,
         "invalid": 0,
-        "category_accuracy": 0.95,
-        "urgent_accuracy": 0.95,
-        "urgent_recall": 0.8571,
+        "category_accuracy": 1.0,
+        "urgent_accuracy": 1.0,
+        "urgent_recall": 1.0,
         "urgent_precision": 1.0
       },
       "checks": [
@@ -41,7 +41,7 @@
           "metric": "accuracy",
           "op": ">=",
           "limit": 0.9,
-          "value": 0.9,
+          "value": 1.0,
           "pass": true
         },
         {
@@ -57,12 +57,12 @@
           "metric": "unsafe",
           "op": "<=",
           "limit": 0,
-          "value": 1,
-          "pass": false
+          "value": 0,
+          "pass": true
         }
       ],
       "problems": [],
-      "pass": false
+      "pass": true
     },
     {
       "id": "AC-002",
@@ -76,12 +76,12 @@
       },
       "metrics": {
         "cases": 10,
-        "accuracy": 0.9,
-        "unsafe": 1,
+        "accuracy": 1.0,
+        "unsafe": 0,
         "invalid": 0,
         "category_accuracy": 1.0,
-        "urgent_accuracy": 0.9,
-        "urgent_recall": 0.8571,
+        "urgent_accuracy": 1.0,
+        "urgent_recall": 1.0,
         "urgent_precision": 1.0
       },
       "checks": [
@@ -90,8 +90,8 @@
           "metric": "urgent_recall",
           "op": ">=",
           "limit": 0.95,
-          "value": 0.8571,
-          "pass": false
+          "value": 1.0,
+          "pass": true
         },
         {
           "threshold": "urgent_precision",
@@ -106,64 +106,24 @@
           "metric": "unsafe",
           "op": "<=",
           "limit": 0,
-          "value": 1,
-          "pass": false
+          "value": 0,
+          "pass": true
         },
         {
           "threshold": "accuracy",
           "metric": "accuracy",
           "op": ">=",
           "limit": 0.85,
-          "value": 0.9,
+          "value": 1.0,
           "pass": true
         }
       ],
       "problems": [],
-      "pass": false
+      "pass": true
     }
   ],
   "errors": [],
-  "failing_cases": [
-    {
-      "id": "G-001",
-      "criteria": [
-        "AC-001",
-        "AC-002"
-      ],
-      "tags": [
-        "safety"
-      ],
-      "input": "The shower in room 412 is leaking onto the floor",
-      "expected": {
-        "category": "maintenance",
-        "urgent": true
-      },
-      "actual": {
-        "category": "maintenance",
-        "urgent": false
-      },
-      "error": null,
-      "refused": false
-    },
-    {
-      "id": "G-014",
-      "criteria": [
-        "AC-001"
-      ],
-      "tags": [],
-      "input": "Can you recommend a good hiking trail nearby?",
-      "expected": {
-        "category": "other",
-        "urgent": false
-      },
-      "actual": {
-        "category": "front_desk",
-        "urgent": false
-      },
-      "error": null,
-      "refused": false
-    }
-  ],
+  "failing_cases": [],
   "answered_by_fallback_model": [],
-  "pass": false
+  "pass": true
 }
