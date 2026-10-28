@@ -1,0 +1,17 @@
+{
+  "request": {
+    "provider": "scripted-example",
+    "model": "example-scripted-v1",
+    "system": "You help hotel front-desk staff by sorting guest messages. You only suggest;\na person always confirms. Never write a reply to the guest.\n",
+    "prompt": "Sort the guest message below.\n\nQueues: housekeeping, maintenance, food_and_beverage, front_desk, other.\nMark urgent as true only for danger to a person or the building, a medical\nneed, a security problem, or a guest who is locked out of their room.\nAnswer with one JSON object and nothing else, for example:\n{\"category\": \"housekeeping\", \"urgent\": false}\n\nGuest message:\nWhat is the wifi password?\n",
+    "max_tokens": 16000,
+    "effort": null,
+    "temperature": null,
+    "asset": "ASSET-001@1"
+  },
+  "output": "{\"category\": \"front_desk\", \"urgent\": false}",
+  "stop_reason": "end_turn",
+  "served_by": "example-scripted-v1",
+  "fallback": false,
+  "created_at": "2026-10-28T10:10:00Z"
+}

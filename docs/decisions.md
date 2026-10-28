@@ -374,3 +374,29 @@ Supersedes "Slash commands share one rules file" above.
   other person plus the tier's extra reviewers (at Tier 2, the risk reviewer
   must accept a technical plan). Add `decomposition:` to `review_routing` if
   that is more than you want.
+
+## 2026-10-28: Worked example is built by a script and recorded with a scripted stand-in
+
+- **Decision:** `tools/build_example.py` rebuilds FEAT-001 by driving the real CLI
+  in a scratch repository (real Git, a local bare remote, an in-memory GitHub),
+  playing every role from this repository's `aidlc.yaml`, then copies `features/`
+  and `audit/log.jsonl` here. Re-run it after changing the people in `aidlc.yaml`
+  so the approvals match.
+- **Decision:** the model answers in the saved cache come from a scripted
+  stand-in (keyword rules in the builder), not a real model. It is named
+  `scripted-example` in `aidlc.yaml` (`eval.provider`) and `example-scripted-v1`
+  on the prompt, and the report's mode says "live" because that is the path it
+  took. To record real answers, set a real provider and model and run
+  `aidlc eval --live`; the saved answers then change, and the report and
+  reviews must be redone.
+- **Rejected:** writing the cache by hand as if a model had answered (it would
+  pass CI while claiming something false); leaving the example out until a
+  real API key exists (the chain would be untested, and the site and docs need
+  something real to show).
+- **Consequence:** the audit log and manifest in the example carry commit
+  numbers and PR numbers from the scratch run, which do not exist in this
+  repository's history. Once the kit lives on GitHub, running the same flow for
+  real replaces them.
+- **Decision:** the example keeps one failing golden case (G-019, a double
+  charge the keyword rules do not know) so the report shows a failing case
+  being listed while still meeting the thresholds.

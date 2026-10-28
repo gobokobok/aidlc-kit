@@ -4,11 +4,20 @@ Take a feature from discovery to an engineering-ready handoff from your IDE,
 in plain language, without touching Git, with whichever AI assistant you
 already use, or none.
 
-> Work in progress. Build steps 1 to 5 of 8 are done: artifact model,
+> Work in progress. Build steps 1 to 6 of 8 are done: artifact model,
 > validator, risk tiers, reviewer routing, CLI, chat commands for several
 > assistants, review and approval, CODEOWNERS, CI checks, the audit log,
-> golden-set evals, the handoff gate and package, and technical plans.
+> golden-set evals, the handoff gate and package, technical plans, and a
+> worked example.
 > Full setup and demo instructions arrive with step 8.
+
+**Worked example.** `features/FEAT-001-guest-request-triage/` is a complete
+Tier 2 feature: discovery, three requirements, two criteria, a prompt, a
+20-case golden set with saved answers, reviews including the risk reviewer, a
+handoff package and a technical plan. Its saved model answers come from a
+scripted stand-in, not a real model (see `docs/decisions.md`), so it needs no
+API key. `tools/build_example.py` rebuilds it. How the same feature changes at
+Tier 3: `docs/example-tier3.md`.
 
 ## Set up a repository
 

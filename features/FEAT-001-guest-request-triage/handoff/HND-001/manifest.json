@@ -1,0 +1,137 @@
+{
+  "feature": "FEAT-001",
+  "title": "Guest request triage",
+  "handoff": {
+    "id": "HND-001",
+    "version": 1
+  },
+  "tier": "T2",
+  "generated_at": "2026-10-28T10:59:00Z",
+  "commit": "ca19609427b5a9a73dbf252bf33fe8f9a4479b09",
+  "items": [
+    {
+      "id": "RISK-001",
+      "type": "risk",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "sam"
+      ],
+      "file": "risk.md",
+      "sha256": "5074733a18718b34114c10cfa187dfaa049f7ad2c60d1fbe5e962f33dd6ebb78"
+    },
+    {
+      "id": "DISC-001",
+      "type": "discovery",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "dana",
+        "sam"
+      ],
+      "file": "discovery.md",
+      "sha256": "dd4bfa7e456d5caed897d6d6bbaf7f9f8eaff91261668ad76d917326725e9347"
+    },
+    {
+      "id": "REQ-001",
+      "type": "requirement",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "priya",
+        "sam"
+      ],
+      "file": "requirements/REQ-001.md",
+      "sha256": "256f0102ddd4628fade5c5720eb6630722cd48af595ffd47ffab87684b556d22"
+    },
+    {
+      "id": "REQ-002",
+      "type": "requirement",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "priya",
+        "sam"
+      ],
+      "file": "requirements/REQ-002.md",
+      "sha256": "095fcb858ab795e8d84d55c852d4e4725f1204b23a4661cace02e4d6a69db1b3"
+    },
+    {
+      "id": "REQ-003",
+      "type": "requirement",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "priya",
+        "sam"
+      ],
+      "file": "requirements/REQ-003.md",
+      "sha256": "a76345ccf992ce274d3701fcbb71f85e25213c556556cc59593129e232c38157"
+    },
+    {
+      "id": "AC-001",
+      "type": "criteria",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "priya",
+        "sam"
+      ],
+      "file": "criteria/AC-001.md",
+      "sha256": "b62a38886c323b1501dd6c7238084f2593279e29bd823c040fdef511000ada33"
+    },
+    {
+      "id": "AC-002",
+      "type": "criteria",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "priya",
+        "sam"
+      ],
+      "file": "criteria/AC-002.md",
+      "sha256": "b3ddae6adb58fcac96176be0155da9ca32215875d934d8a0c302ab2276334b4d"
+    },
+    {
+      "id": "ASSET-001",
+      "type": "asset",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "priya",
+        "sam"
+      ],
+      "file": "assets/ASSET-001.md",
+      "sha256": "9dc469b925d2382c21224fb322c4356ab2cc54a55ab04b46d8d715f2ba83055f"
+    },
+    {
+      "id": "EVAL-001",
+      "type": "eval",
+      "version": 1,
+      "owner": "alice",
+      "approvers": [
+        "bob",
+        "sam"
+      ],
+      "file": "evals/EVAL-001.md",
+      "sha256": "1126e7df674f3eb2aca45e00244290fe1da214b073598d8ef61f93f9b957573d"
+    }
+  ],
+  "eval": {
+    "pass": true,
+    "golden_sha256": "aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23"
+  },
+  "files": {
+    "assets/ASSET-001.md": "9dc469b925d2382c21224fb322c4356ab2cc54a55ab04b46d8d715f2ba83055f",
+    "eval-report.md": "5cd95f1413c894d1dbca8a25c4a9bdc84c8e4565fd20d6cd7433dcb36719b764",
+    "golden.yaml": "aaf9eb5aa450cf9e6c7aee37b93e4afe26118c359ae41e0927fbe99980611f23",
+    "risk.md": "5074733a18718b34114c10cfa187dfaa049f7ad2c60d1fbe5e962f33dd6ebb78",
+    "spec.md": "b057c054ee0ca2a74b4203dab12d836a1bb7c18052498a731a6d5af37e59a553",
+    "trace.json": "587a0e3bb420da17496aade366c20693b13bbfc6c9bcab123ab82063336d95de"
+  }
+}
