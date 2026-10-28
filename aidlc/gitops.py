@@ -35,6 +35,30 @@ class PullRequest:
     state: str
 
 
+@dataclass(frozen=True)
+class Review:
+    """One GitHub pull request review. GitHub authenticates `login`, so
+    this, unlike a name written in a file, cannot be forged."""
+    login: str
+    state: str          # APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED
+    commit_id: str
+    submitted_at: str
+    body: str = ""
+
+
+def _json_stream(text: str) -> list:
+    """Parse concatenated JSON values (gh --paginate output)."""
+    decoder, pos, out = json.JSONDecoder(), 0, []
+    while pos < len(text):
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
+            break
+        value, pos = decoder.raw_decode(text, pos)
+        out.append(value)
+    return out
+
+
 def subprocess_runner(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=False)
 
@@ -109,8 +133,30 @@ class GitOps:
         return paths
 
     def file_at_head(self, path: str) -> str | None:
-        result = self._call(["git", "show", f"HEAD:{path}"], "", check=False)
+        return self.file_at("HEAD", path)
+
+    def file_at(self, ref: str, path: str) -> str | None:
+        """A file's text at a commit, or None if it did not exist there."""
+        result = self._call(["git", "show", f"{ref}:{path}"], "", check=False)
         return result.stdout if result.returncode == 0 else None
+
+    def ref_exists(self, ref: str) -> bool:
+        return self._call(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+                          "", check=False).returncode == 0
+
+    def changed_between(self, base: str, head: str = "HEAD", merge_base: bool = False) -> list[str]:
+        """Paths that differ between two commits (`base...head` with merge_base)."""
+        sep = "..." if merge_base else ".."
+        out = self._git("diff", "--name-only", "--no-renames", f"{base}{sep}{head}",
+                        what="compare versions")
+        return [line for line in out.splitlines() if line]
+
+    def commit_subject(self, ref: str = "HEAD") -> str:
+        return self._git("log", "-1", "--format=%s", ref, what="read a commit")
+
+    def tracked_files(self, ref: str, prefix: str) -> list[str]:
+        out = self._git("ls-tree", "-r", "--name-only", ref, "--", prefix, what="list files")
+        return [line for line in out.splitlines() if line]
 
     def feature_branches(self) -> list[str]:
         """Feature branches known locally or on the remote."""
@@ -182,6 +228,17 @@ class GitOps:
         branch = self.current_branch()
         self._git("push", "--quiet", "-u", REMOTE, branch, what="send your work to GitHub")
 
+    def push_head_to(self, branch: str) -> None:
+        """Push HEAD to a branch (CI runs on a detached HEAD). If someone
+        pushed in between, rebase once and retry. Never forces."""
+        if self._call(["git", "push", "--quiet", REMOTE, f"HEAD:{branch}"], "", check=False).returncode == 0:
+            return
+        self._git("fetch", "--quiet", REMOTE, branch, what="fetch the latest changes")
+        if self._call(["git", "rebase", "--quiet", f"{REMOTE}/{branch}"], "", check=False).returncode != 0:
+            self._call(["git", "rebase", "--abort"], "", check=False)
+            raise ConflictError(f"Could not add to {branch}: it changed in a conflicting way.")
+        self._git("push", "--quiet", REMOTE, f"HEAD:{branch}", what=f"push to {branch}")
+
     def pr_for_branch(self, branch: str) -> PullRequest | None:
         result = self._call(["gh", "pr", "view", branch, "--json", "number,url,state"], "", check=False)
         if result.returncode != 0:
@@ -201,6 +258,23 @@ class GitOps:
     def update_pr(self, number: int, title: str, body: str) -> None:
         self._gh("pr", "edit", str(number), "--title", title, "--body", body,
                  what="update the review request on GitHub")
+
+    def pr_reviews(self, number: int) -> list[Review]:
+        out = self._gh("api", f"repos/{{owner}}/{{repo}}/pulls/{number}/reviews", "--paginate",
+                       what="read the reviews on GitHub")
+        reviews = []
+        for page in _json_stream(out):
+            for r in page if isinstance(page, list) else [page]:
+                reviews.append(Review(
+                    login=(r.get("user") or {}).get("login", ""), state=r.get("state", ""),
+                    commit_id=r.get("commit_id", ""), submitted_at=r.get("submitted_at") or "",
+                    body=r.get("body") or ""))
+        return reviews
+
+    def review_pr(self, number: int, approve: bool, body: str) -> None:
+        flag = "--approve" if approve else "--request-changes"
+        self._gh("pr", "review", str(number), flag, "--body", body,
+                 what="record your review on GitHub")
 
     def request_reviewers(self, number: int, users: Iterable[str]) -> None:
         users = sorted(set(users))

@@ -9,7 +9,7 @@ people:
   alice: [pm]
   dana: [pm]              # a second PM, so discovery can get a PM peer approval
   bob: [ops_reviewer]
-  priya: [tech_reviewer]
+  priya: [tech_reviewer, kit_admin]   # kit_admin: owns aidlc.yaml and .github/
   sam: [risk_reviewer]
   lee: [data_owner]       # needed by Tier 3 features
   jonas: [engineer]

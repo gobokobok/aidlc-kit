@@ -169,6 +169,9 @@ def check_feature(items: list[Artifact], config: Config | None = None) -> list[I
                 err(f"approval by {ap.by} is for v{ap.version}, which does not exist yet (current v{a.version})")
             elif ap.version < a.version:
                 warn(f"approval by {ap.by} was for v{ap.version} and no longer counts for v{a.version}")
+        for rj in a.extra.get("rejections", []):
+            if rj["by"] == a.owner:
+                err(f"{rj['by']} rejected their own artifact; the reviewer must be someone else")
         if a.status == "approved" and not any(ap.by != a.owner for ap in a.approved_current):
             err(f"is marked approved but nobody other than the owner approved v{a.version}")
         if config.people:

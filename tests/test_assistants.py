@@ -48,7 +48,7 @@ def test_every_cli_call_in_prompts_is_a_real_command():
 
 def test_commands_cover_the_cli_workflow():
     names = {c.name for c in asst.load_commands()}
-    assert names == {"new-feature", "discover", "requirement", "criteria", "asset", "privacy",
+    assert names == {"new-feature", "discover", "requirement", "criteria", "asset", "privacy", "approve", "reject",
                      "change", "risk", "submit", "reviewers", "status"}
     assert all(c.description for c in asst.load_commands())
 

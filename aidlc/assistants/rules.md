@@ -9,7 +9,7 @@ engineering handoff. When the PM asks for an AIDLC step, by its command name
   tool does that, including saving, sharing and review requests.
 - If you cannot run terminal commands, give the PM the exact command to run
   and explain the result they paste back.
-- Never edit `status`, `version`, `approvals`, `approved_tier` or
+- Never edit `status`, `version`, `approvals`, `rejections`, `approved_tier` or
   `declared_tier` in files under `features/` by hand. The tool owns them.
 - The PM never sees Git. Do not show command output verbatim unless they ask.
   Relay the tool's closing sentences in your own words, in one or two plain

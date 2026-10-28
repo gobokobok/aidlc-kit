@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from aidlc import artifacts as art
-from aidlc import assistants, review, reviewers, risk, workspace
-from aidlc.artifacts import Artifact
-from aidlc.config import Config, find_root, load_config
+from aidlc import assistants, audit, blocks, ci, review, reviewers, risk, workspace
+from aidlc.artifacts import Artifact, ArtifactError
+from aidlc.config import CONFIG_FILE, Config, find_root, load_config, parse_config
 from aidlc.gitops import MAIN_BRANCH, GitError, GitOps, commit_message, feature_branch
-from aidlc.validate import refresh_statuses, validate_repo
+from aidlc.validate import load_feature, refresh_statuses, validate_repo
 from aidlc.workspace import Feature, WorkspaceError
 
 CREATE_COMMANDS = {
@@ -414,8 +414,59 @@ def describe_check(c: reviewers.RoleCheck, config: Config) -> str:
     return f"… {label}{why}: {who}"
 
 
+def look_at_feature(ctx: Ctx, explicit: str | None) -> Feature:
+    """For read-mostly commands: open the feature and record any approvals
+    given on GitHub. Works without Git too (read only)."""
+    if not ctx.ops.is_repo():
+        return resolve_feature(ctx, explicit)
+    feature = open_feature(ctx, explicit)
+    sync_reviews(ctx, feature)
+    return feature
+
+
+def version_at(ctx: Ctx) -> review.VersionAt:
+    cache: dict[tuple[str, str], int | None] = {}
+
+    def lookup(commit: str, a: Artifact) -> int | None:
+        rel = a.path.resolve().relative_to(ctx.root.resolve()).as_posix() if a.path else ""
+        if (commit, rel) not in cache:
+            text = ctx.ops.file_at(commit, rel) if commit and rel else None
+            try:
+                cache[commit, rel] = art.parse(text).version if text else None
+            except ArtifactError:
+                cache[commit, rel] = None
+        return cache[commit, rel]
+    return lookup
+
+
+def sync_reviews(ctx: Ctx, feature: Feature) -> None:
+    """Record approvals given on the GitHub screen into the files."""
+    if not ctx.ops.has_remote():
+        return
+    try:
+        pr = ctx.ops.pr_for_branch(feature_branch(feature.id))
+        if pr is None or pr.state != "OPEN":
+            return
+        reviews = ctx.ops.pr_reviews(pr.number)
+    except GitError:
+        ctx.say("(I could not check GitHub for new reviews just now.)")
+        return
+    items = workspace.artifacts_of(ctx.root, feature)
+    recorded = review.sync_github_reviews(ctx.config, items, reviews, version_at(ctx), ctx.now)
+    if recorded:
+        by_person: dict[str, list[str]] = {}
+        for a, login in recorded:
+            by_person.setdefault(login, []).append(a.id)
+        summary = "; ".join(f"{login} for {review.join(ids)}" for login, ids in by_person.items())
+        ctx.ops.commit(["features"], commit_message(feature.id, f"Record GitHub approvals: {summary}"))
+        ctx.ops.push()
+        ctx.say(f"Recorded approvals given on GitHub: {summary}.")
+    for r in review.changes_requested(reviews):
+        ctx.say(f"{r.login} asked for changes on GitHub: {r.body.strip() or '(no comment)'}")
+
+
 def cmd_reviewers(ctx: Ctx, args: argparse.Namespace) -> int:
-    feature = resolve_feature(ctx, args.feature)
+    feature = look_at_feature(ctx, args.feature)
     items = sorted(workspace.artifacts_of(ctx.root, feature), key=workspace.sort_key)
     tier = tier_of(ctx, items)
     ctx.say(f"{feature.id} {feature.title}: {tier.display if tier else 'no valid risk profile yet'}")
@@ -441,12 +492,15 @@ def cmd_reviewers(ctx: Ctx, args: argparse.Namespace) -> int:
 
 
 def cmd_status(ctx: Ctx, args: argparse.Namespace) -> int:
-    feature = resolve_feature(ctx, args.feature)
+    feature = look_at_feature(ctx, args.feature)
     items = sorted(workspace.artifacts_of(ctx.root, feature), key=workspace.sort_key)
     tier = tier_of(ctx, items)
     ctx.say(f"{feature.id} {feature.title} · {tier.display if tier else 'no valid risk profile yet'}")
     for a in items:
         ctx.say(f"  {f'{a.id} v{a.version}':<14} {a.status:<9}  {a.title}")
+        last = latest_rejection(a)
+        if a.status == "rejected" and last:
+            ctx.say(f"  {'':<14} {last['by']} said: {last['reason']}")
     problems = feature_problems(ctx, feature)
     if problems:
         ctx.say(f"{len(problems)} problem(s) need fixing:")
@@ -456,8 +510,14 @@ def cmd_status(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
+def latest_rejection(a: Artifact) -> dict | None:
+    notes = [r for r in a.extra.get("rejections", []) if r.get("version") == a.version]
+    return notes[-1] if notes else None
+
+
 def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
     feature = open_feature(ctx, args.feature)
+    sync_reviews(ctx, feature)
     problems = feature_problems(ctx, feature)
     if problems:
         ctx.say("I can't send this for review yet:")
@@ -495,10 +555,217 @@ def cmd_submit(ctx: Ctx, args: argparse.Namespace) -> int:
     return 0
 
 
+# --- reviewer commands -----------------------------------------------------
+
+def send_to_github(ctx: Ctx, feature: Feature, approve: bool, body: str) -> str:
+    """Push recorded decisions and mirror them as a GitHub review. Returns a
+    sentence for the reviewer."""
+    if not ctx.ops.has_remote():
+        return "This repository is not connected to GitHub, so the decision is recorded here only."
+    pr = ctx.ops.pr_for_branch(feature_branch(feature.id))
+    if pr is None or pr.state != "OPEN":
+        ctx.ops.push()
+        return "There is no open review request on GitHub yet, so it is recorded in the files only."
+    ctx.ops.push()
+    ctx.ops.review_pr(pr.number, approve, body)
+    items = workspace.artifacts_of(ctx.root, feature)
+    tier = tier_of(ctx, items)
+    plan = review.plan_reviews(ctx.config, items, tier, feature.owner)
+    ctx.ops.update_pr(pr.number, review.pr_title(feature), review.pr_body(feature, items, ctx.config, tier, plan))
+    return "It is on the GitHub review request too."
+
+
+def say_skipped(ctx: Ctx, outcome: review.Outcome) -> None:
+    for aid, why in outcome.skipped:
+        ctx.say(f"Skipped {aid}: {why}.")
+
+
+def cmd_approve(ctx: Ctx, args: argparse.Namespace) -> int:
+    feature = open_feature(ctx, args.feature)
+    user = current_user(ctx)
+    problems = feature_problems(ctx, feature)
+    if problems:
+        ctx.say("These need fixing before anything can be approved:")
+        for i in problems:
+            ctx.say(f"  ✗ {i.where}: {i.message}")
+        return 1
+    outcome = review.approve(ctx.config, workspace.artifacts_of(ctx.root, feature), user,
+                             args.ids or None, ctx.now)
+    if not outcome.done:
+        # Without named IDs, items that are not this reviewer's to approve are not news.
+        if args.ids:
+            say_skipped(ctx, outcome)
+        ctx.say("Nothing was approved." if args.ids else "Nothing is waiting for you to approve.")
+        return 1
+    done = outcome.done
+    ctx.ops.commit(["features"], commit_message(
+        feature.id, f"Approved by {user}: " + ", ".join(f"{d.artifact.id} v{d.artifact.version}" for d in done)))
+    what = "; ".join(
+        f"{d.artifact.id} v{d.artifact.version} as {review.join([reviewers.role_label(r) for r in d.roles])}"
+        for d in done)
+    where = send_to_github(ctx, feature, True, f"Approved in AIDLC Kit: {what}.")
+    items = workspace.artifacts_of(ctx.root, feature)
+    tier = tier_of(ctx, items)
+    complete = [d.artifact.id for d in done if d.complete]
+    lines = [f"Approved {what}. {where}"]
+    if complete:
+        lines.append(f"{review.join(complete)} {'is' if len(complete) == 1 else 'are'} now fully approved.")
+    for d in done:
+        if not d.complete:
+            current = next(a for a in items if a.id == d.artifact.id)
+            pending = reviewers.pending(ctx.config, current, tier)
+            lines.append(f"{d.artifact.id} still needs " + review.join(
+                [f"{reviewers.role_label(c.role)} ({', '.join(c.candidates) or 'nobody yet'})" for c in pending]) + ".")
+    ctx.say(" ".join(lines))
+    if args.ids:
+        say_skipped(ctx, outcome)
+    return 0
+
+
+def cmd_reject(ctx: Ctx, args: argparse.Namespace) -> int:
+    feature = open_feature(ctx, args.feature)
+    user = current_user(ctx)
+    outcome = review.reject(ctx.config, workspace.artifacts_of(ctx.root, feature), user,
+                            args.ids, args.reason, ctx.now)
+    say_skipped(ctx, outcome)
+    if not outcome.done:
+        ctx.say("Nothing was rejected.")
+        return 1
+    ids = review.join([f"{d.artifact.id} v{d.artifact.version}" for d in outcome.done])
+    ctx.ops.commit(["features"], commit_message(feature.id, f"Rejected by {user}: {ids}"))
+    where = send_to_github(ctx, feature, False, f"Changes requested on {ids}: {args.reason.strip()}")
+    owners = review.join(sorted({d.artifact.owner for d in outcome.done}))
+    ctx.say(f"Rejected {ids} with your reason; {owners} will see it in /status. {where}")
+    return 0
+
+
+# --- repository and CI commands --------------------------------------------
+
+def cmd_sync_codeowners(ctx: Ctx, args: argparse.Namespace) -> int:
+    path = ctx.root / ci.CODEOWNERS_PATH
+    existing = path.read_text(encoding="utf-8") if path.is_file() else None
+    expected = ci.codeowners(ctx.config)
+    if args.check:
+        if (blocks.extract(existing, blocks.HASH_MARKERS) or "") == expected.strip():
+            ctx.say("CODEOWNERS matches aidlc.yaml.")
+            return 0
+        ctx.say("CODEOWNERS does not match aidlc.yaml. Run `aidlc sync-codeowners` and commit the result.")
+        return 1
+    written = assistants.write_files(ctx.root, {
+        ci.CODEOWNERS_PATH: blocks.upsert(existing, expected, blocks.HASH_MARKERS)})
+    if written[0].action == "unchanged":
+        ctx.say("CODEOWNERS already matches aidlc.yaml.")
+        return 0
+    if ctx.ops.is_repo():
+        ctx.ops.commit([ci.CODEOWNERS_PATH], commit_message("AIDLC", "Regenerate CODEOWNERS from aidlc.yaml"))
+    ctx.say("Regenerated CODEOWNERS from aidlc.yaml.")
+    return 0
+
+
+def cmd_sync_ci(ctx: Ctx, args: argparse.Namespace) -> int:
+    config_text = (ctx.root / CONFIG_FILE).read_text(encoding="utf-8") if (ctx.root / CONFIG_FILE).is_file() else ""
+    written = assistants.write_files(ctx.root, assistants.ci_files(ctx.root, config_text, args.install))
+    changed = [w.path for w in written if w.action != "unchanged"]
+    if changed and ctx.ops.is_repo():
+        ctx.ops.commit(changed, commit_message("AIDLC", "Update CI workflows and CODEOWNERS"))
+    ctx.say(f"Updated {len(changed)} CI file(s)." if changed else "CI files are already up to date.")
+    return 0
+
+
+def cmd_approvals_check(ctx: Ctx, args: argparse.Namespace) -> int:
+    ops = ctx.ops
+    base_config = ops.file_at(args.base, CONFIG_FILE)
+    config = parse_config(base_config)[0] if base_config else ctx.config
+    changed_paths = ops.changed_between(args.base, "HEAD", merge_base=True)
+    notes = []
+    if CONFIG_FILE in changed_paths:
+        notes.append(f"This pull request changes {CONFIG_FILE}; the check uses the version on the base branch.")
+    feature_dirs = sorted({"/".join(p.split("/")[:2]) for p in changed_paths
+                           if p.startswith("features/") and p.endswith(".md")})
+    feature_items: dict[str, list[Artifact]] = {}
+    changed: list[Artifact] = []
+    base_tier: dict[str, str | None] = {}
+    for rel_dir in feature_dirs:
+        if not (ctx.root / rel_dir).is_dir():
+            continue
+        feature_id, items, _ = load_feature(ctx.root / rel_dir, ctx.root)
+        if feature_id is None:
+            continue
+        feature_items[feature_id] = items
+        for a in items:
+            rel = a.path.resolve().relative_to(ctx.root.resolve()).as_posix()
+            if rel in changed_paths:
+                changed.append(a)
+                if a.type == "risk":
+                    old = ops.file_at(args.base, rel)
+                    try:
+                        base_tier[feature_id] = art.parse(old).extra.get("approved_tier") if old else None
+                    except ArtifactError:
+                        base_tier[feature_id] = None
+    reviews = ops.pr_reviews(args.pr) if changed else []
+    result = review.approvals_check(config, changed, feature_items, reviews, version_at(ctx), base_tier)
+    for line in result.problems:
+        ctx.say(f"  ✗ {line}")
+    for line in notes + result.notes:
+        ctx.say(f"  ! {line}")
+    if result.ok:
+        ctx.say(f"approvals_complete: all {len(result.checked)} submitted item(s) have every required approval.")
+        return 0
+    ctx.say(f"approvals_complete: {len(result.problems)} problem(s); merging is blocked until they are resolved.")
+    return 1
+
+
+def _no_base(ref: str | None, ops: GitOps) -> bool:
+    return not ref or set(ref) == {"0"} or not ops.ref_exists(ref)
+
+
+def cmd_audit_record(ctx: Ctx, args: argparse.Namespace) -> int:
+    ops = ctx.ops
+    fresh = _no_base(args.before, ops)
+    changed = ops.tracked_files(args.after, "features") if fresh else ops.changed_between(args.before, args.after)
+    log_path = ctx.root / audit.LOG
+    old_log = log_path.read_text(encoding="utf-8") if log_path.is_file() else ""
+
+    def load_head(rel_dir: str) -> list[Artifact]:
+        return load_feature(ctx.root / rel_dir, ctx.root)[1] if (ctx.root / rel_dir).is_dir() else []
+
+    entries = audit.build_entries(
+        changed, load_head, lambda p: None if fresh else ops.file_at(args.before, p), ctx.config,
+        args.actor, args.after, args.pr or audit.pr_from_subject(ops.commit_subject(args.after)), ctx.now)
+    if not entries:
+        ctx.say("No artifacts changed; nothing to record.")
+        return 0
+    audit.append(ctx.root, entries)
+    problems = audit.check_log(old_log, log_path.read_text(encoding="utf-8"))
+    if problems:
+        ctx.say(" ".join(problems))
+        return 1
+    if args.commit:
+        ops.commit([audit.LOG], commit_message("AIDLC", f"Audit: {len(entries)} change(s) in {args.after[:7]}"))
+        ops.push_head_to(MAIN_BRANCH)
+    ctx.say(f"Recorded {len(entries)} change(s) in the audit log.")
+    return 0
+
+
+def cmd_audit_check(ctx: Ctx, args: argparse.Namespace) -> int:
+    if _no_base(args.base, ctx.ops):
+        ctx.say("No earlier version to compare the audit log with; nothing to check.")
+        return 0
+    path = ctx.root / audit.LOG
+    problems = audit.check_log(ctx.ops.file_at(args.base, audit.LOG),
+                               path.read_text(encoding="utf-8") if path.is_file() else None, args.frozen)
+    for line in problems:
+        ctx.say(f"  ✗ {line}")
+    if problems:
+        return 1
+    ctx.say("The audit log is intact.")
+    return 0
+
+
 def cmd_init(ctx: Ctx, args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     names = list(dict.fromkeys(args.assistant or []))
-    written = assistants.init(root, names)
+    written = assistants.init(root, names, args.install)
     changed = [w for w in written if w.action != "unchanged"]
     for w in changed:
         ctx.say(f"  {w.action} {w.path}")
@@ -550,7 +817,46 @@ def build_parser() -> argparse.ArgumentParser:
                    help="repeat for several: " + "; ".join(
                        f"{a.name} = {a.summary}" for a in assistants.ASSISTANTS.values()))
     p.add_argument("--no-commit", action="store_true", help="write the files but do not commit them")
+    p.add_argument("--install", default=ci.DEFAULT_INSTALL, help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_init)
+
+    p = sub.add_parser("approve", help="approve items waiting for your review")
+    p.add_argument("ids", nargs="*", help="item IDs (default: everything waiting for you)")
+    p.add_argument("--feature")
+    p.set_defaults(func=cmd_approve)
+
+    p = sub.add_parser("reject", help="reject items, saying why")
+    p.add_argument("ids", nargs="+")
+    p.add_argument("--reason", required=True)
+    p.add_argument("--feature")
+    p.set_defaults(func=cmd_reject)
+
+    p = sub.add_parser("sync-codeowners", help="regenerate CODEOWNERS from aidlc.yaml")
+    p.add_argument("--check", action="store_true", help="only check; fail if it differs")
+    p.set_defaults(func=cmd_sync_codeowners)
+
+    p = sub.add_parser("sync-ci", help="write or update the CI workflows and CODEOWNERS")
+    p.add_argument("--install", default=ci.DEFAULT_INSTALL, help="command CI uses to install the kit")
+    p.set_defaults(func=cmd_sync_ci)
+
+    p = sub.add_parser("approvals-check", help="CI: every required role approved (approvals_complete)")
+    p.add_argument("--pr", type=int, required=True)
+    p.add_argument("--base", required=True, help="base branch ref, e.g. origin/main")
+    p.set_defaults(func=cmd_approvals_check)
+
+    p = sub.add_parser("audit", help="CI: the append-only audit log")
+    audit_sub = p.add_subparsers(dest="audit_command", required=True)
+    q = audit_sub.add_parser("record", help="append entries for artifacts changed on main")
+    q.add_argument("--before", required=True)
+    q.add_argument("--after", required=True)
+    q.add_argument("--actor", required=True)
+    q.add_argument("--pr", type=int)
+    q.add_argument("--commit", action="store_true", help="commit and push the log to main")
+    q.set_defaults(func=cmd_audit_record)
+    q = audit_sub.add_parser("check", help="fail if earlier lines were changed or removed")
+    q.add_argument("--base", required=True)
+    q.add_argument("--frozen", action="store_true", help="pull requests: the log must not change")
+    q.set_defaults(func=cmd_audit_check)
 
     p = sub.add_parser("validate", help="check every artifact in the repository")
     p.add_argument("--write", action="store_true", help="write computed stale/draft statuses first")

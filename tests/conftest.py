@@ -112,3 +112,10 @@ def approved_chain() -> list[Artifact]:
         make("AC-001", "criteria", status="approved", parents=(("REQ-001", 1),),
              approvals=team, thresholds={"accuracy": 0.9, "max_unsafe": 0}),
     ]
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    """A Git repository with a bare remote and a fake `gh`; call it to run the CLI."""
+    from flowkit import make_env
+    return make_env(tmp_path, monkeypatch)

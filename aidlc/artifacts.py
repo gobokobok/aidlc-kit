@@ -327,6 +327,18 @@ def check_meta(meta: Any, where: str) -> list[Issue]:
     if "thresholds" in meta:
         issues.extend(check_thresholds(meta["thresholds"], where))
 
+    rejections = meta.get("rejections")
+    if "rejections" in meta:
+        if not isinstance(rejections, list):
+            err("rejections must be a list")
+        else:
+            for i, rj in enumerate(rejections, 1):
+                if (not isinstance(rj, dict) or set(rj) != {"by", "version", "at", "reason"}
+                        or not isinstance(rj["by"], str) or not USERNAME_RE.match(rj["by"])
+                        or not _is_int(rj["version"]) or _parse_ts(rj["at"]) is None
+                        or not str(rj["reason"]).strip()):
+                    err(f"rejection #{i} must be {{by: username, version: N, at: timestamp, reason: text}}")
+
     return issues
 
 

@@ -113,8 +113,9 @@ company's repository, whoever sets it up runs once:
 aidlc init --assistant <name> [--assistant <name> ...]
 ```
 
-`init` writes `aidlc.yaml` (if missing), `features/`, and the files for each
-chosen assistant. Rerunning it updates them. It never overwrites a company's
+`init` writes `aidlc.yaml` (if missing), `features/`, the CI workflows,
+CODEOWNERS, and the files for each chosen assistant (`aidlc sync-ci` refreshes
+the CI files after an upgrade). Rerunning it updates them. It never overwrites a company's
 own instructions: in shared files it only replaces a marked AIDLC block.
 
 | `--assistant` | Writes | PM invokes |
@@ -269,6 +270,14 @@ Controls:
   + code owners, required checks `validate`, `eval` and `approvals_complete`.
 - CI `approvals_complete`: for every non-draft artifact in the PR, all effective
   required roles are satisfied on the current version, and approver is not the owner.
+  An approval written in a file counts only if GitHub confirms that person
+  approved the PR at a commit where the artifact had that version, and roles
+  are read from `aidlc.yaml` on the base branch, so a PR cannot grant itself
+  reviewers. Approvals given on the GitHub screen are recorded into the files
+  by the PM's next `/status`, `/reviewers` or `/submit`.
+- Optional role `kit_admin` owns `aidlc.yaml` and `.github/` in CODEOWNERS.
+- The `audit` job pushes to `main`, so `main`'s protection must let GitHub
+  Actions bypass the pull request rule (documented setup step).
 - CI `validate`: frontmatter schema, ID uniqueness, parent links resolve,
   staleness recomputed, approver ≠ owner, handoff gate if a handoff bundle is present.
 - CI `audit` (on merge to `main`): appends one JSON line per changed artifact to

@@ -16,12 +16,11 @@ import jinja2
 import yaml
 
 from aidlc import artifacts as art
-from aidlc import reviewers, risk, trace
+from aidlc import audit, reviewers, risk, trace
 from aidlc.artifacts import ALLOWED_PARENTS, Artifact, ArtifactError, ParentRef
 from aidlc.config import Config, Tier, tier_rank
 from aidlc.validate import FEATURE_FILE, FEATURES_DIR, StatusChange, load_feature, refresh_statuses
 
-AUDIT_LOG = Path("audit") / "log.jsonl"
 TEMPLATES = Path(__file__).parent / "templates"
 
 # Order artifacts are normally written in, for summaries.
@@ -136,15 +135,8 @@ def find_artifact(items: list[Artifact], artifact_id: str) -> Artifact:
 def used_ids(root: Path, feature: Feature, items: list[Artifact]) -> set[str]:
     """IDs in use now plus every ID the audit log has seen, so none is reused."""
     ids = {a.id for a in items}
-    log = root / AUDIT_LOG
-    if log.is_file():
-        for line in log.read_text(encoding="utf-8").splitlines():
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("feature") == feature.id and isinstance(entry.get("id"), str):
-                ids.add(entry["id"])
+    ids.update(e["id"] for e in audit.read_entries(root)
+               if e.get("feature") == feature.id and isinstance(e.get("id"), str))
     return ids
 
 

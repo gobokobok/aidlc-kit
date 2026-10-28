@@ -202,3 +202,67 @@ Supersedes "Slash commands share one rules file" above.
   placeholder, so non-Claude prompts describe the PM's input in words.
 - **Not yet:** live evals are still specified per provider in step 4; `init`
   will also write CODEOWNERS and CI workflows from step 3.
+
+## 2026-10-28: Approvals count only when GitHub confirms them
+
+- **Decision:** `/approve` records the approval in the artifact's frontmatter,
+  pushes, then submits a GitHub review. `approvals_complete` counts a recorded
+  approval only if that login has an APPROVED review on the PR at a commit
+  where the artifact had the same version. Roles come from `aidlc.yaml` on the
+  base branch. Changing `approved_tier` needs an approved risk review in the
+  same PR.
+- **Rejected:** trusting frontmatter alone (anyone can type a name); trusting
+  Git commit authors (also forgeable); counting only reviews on the latest
+  commit (every later push would wipe approvals of untouched items).
+- **Why:** GitHub authenticates reviewers; the file is the readable record
+  and the review is the proof.
+
+## 2026-10-28: Approvals given on the GitHub screen are synced by the PM's commands
+
+- **Decision:** `/status`, `/reviewers` and `/submit` read the PR's reviews and
+  record any approvals given on the GitHub screen into the files (for items
+  the person can still approve, at the version they saw), then push. GitHub
+  "request changes" reviews are shown to the PM, not turned into rejections.
+- **Rejected:** a CI bot committing to the PR branch (pushes by the default CI
+  token do not re-run the required checks, leaving the PR stuck).
+- **Why:** keeps the files the single readable record without bot pushes;
+  until synced, `approvals_complete` notes that the approval exists.
+
+## 2026-10-28: Approving an item marks it approved only when every role is in
+
+- **Decision:** each `/approve` adds the reviewer's approval; the item becomes
+  `approved` once all effective roles are satisfied. Approving the risk profile
+  writes `approved_tier`, then other items are re-settled under the new tier.
+  While a higher tier still governs, lowering it needs that tier's reviewers
+  (at Tier 3: risk reviewer and data owner).
+- **Why:** status then means what it says, and the audit log's `status` and
+  `roles_satisfied` agree.
+
+## 2026-10-28: `/reject` requires IDs and a reason; it stores `rejections`
+
+- **Decision:** rejections are kept as a list in frontmatter
+  (`{by, version, at, reason}`), the reviewer's own approval of that version is
+  withdrawn, and GitHub gets a "request changes" review. The author sees the
+  reason in `/status`. Rejecting needs explicit IDs.
+- **Why:** a reason is the point of a rejection, and a default of "reject
+  everything" is too easy to trigger by accident.
+
+## 2026-10-28: Kit-managed blocks in CODEOWNERS; `kit_admin`
+
+- **Decision:** `sync-codeowners` writes only a marked block in
+  `.github/CODEOWNERS`, so a company's own code owners stay. The validate job
+  fails if the block differs from what `aidlc.yaml` produces. People with the
+  optional role `kit_admin` own `aidlc.yaml` and `.github/`.
+- **Why:** `aidlc.yaml` decides who reviews what; changing it should itself
+  need review.
+
+## 2026-10-28: Audit log written by CI after merge
+
+- **Decision:** the `audit` workflow runs on every push to `main`, appends one
+  line per changed artifact (deletions as `status: deleted`), commits as
+  github-actions[bot] and pushes to `main`, rebasing once if needed. PRs may not
+  touch the log; on `main` earlier lines must be an exact prefix.
+  Runs are serialised with a concurrency group; the bot's own commit changes no
+  artifacts, so it records nothing and does not loop.
+- **Trade-off:** `main` must let GitHub Actions bypass the PR rule. That is a
+  setup step the docs must spell out (limitations).
