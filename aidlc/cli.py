@@ -1158,7 +1158,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="repeat for several: " + "; ".join(
                        f"{a.name} = {a.summary}" for a in assistants.ASSISTANTS.values()))
     p.add_argument("--no-commit", action="store_true", help="write the files but do not commit them")
-    p.add_argument("--install", default=ci.DEFAULT_INSTALL, help=argparse.SUPPRESS)
+    p.add_argument("--install", default=ci.DEFAULT_INSTALL, help="command CI uses to install the kit (default: pip install aidlc-kit==<version>)")
     p.set_defaults(func=cmd_init)
 
     p = sub.add_parser("handoff", help="check the gate, build the package, then merge and tag it")

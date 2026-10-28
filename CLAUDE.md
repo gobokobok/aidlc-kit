@@ -4,6 +4,10 @@ Build spec and working rules for whoever builds the kit (here: Claude Code).
 Read fully before writing code. This file is not shipped: companies install the
 kit as a package and `aidlc init` writes the files their own assistant needs.
 
+> **Status:** all eight build steps are done (see `README.md` and `docs/`). This
+> file stays as the record of what the kit was built to do; where the code and
+> this file differ, `docs/decisions.md` says why.
+
 ## 1. Purpose
 
 A starter kit that lets Product Managers take a feature from discovery to an

@@ -4,30 +4,32 @@ Take a feature from discovery to an engineering-ready handoff from your IDE,
 in plain language, without touching Git, with whichever AI assistant you
 already use, or none.
 
-> Work in progress. Build steps 1 to 7 of 8 are done: artifact model,
-> validator, risk tiers, reviewer routing, CLI, chat commands for several
-> assistants, review and approval, CODEOWNERS, CI checks, the audit log,
-> golden-set evals, the handoff gate and package, technical plans, a
-> worked example, and the read-only viewer site.
-> Full setup and demo instructions arrive with step 8.
+Underneath, the kit handles versioning, ownership, review and approval, an audit
+trail, traceability, golden-set evaluation of the AI behaviour, and the handoff
+to engineering. Product Managers write; named reviewers approve; one gate
+decides whether a feature is ready to leave.
 
-**Worked example.** `features/FEAT-001-guest-request-triage/` is a complete
-Tier 2 feature recorded on this repository: discovery, three requirements, two
-criteria, a prompt, a 20-case golden set with saved Claude answers, reviews
-including the risk reviewer, a handoff package, and a technical plan (see
-[PR 1](https://github.com/gobokobok/aidlc-kit/pull/1) and
-[PR 2](https://github.com/gobokobok/aidlc-kit/pull/2)). Two GitHub accounts
-play all the roles, so it shows the mechanism, not independent review. CI
-replays the saved answers and needs no API key. How the same feature changes at
-Tier 3: `docs/example-tier3.md`.
+**Status:** version 0.1, all eight build steps done. It is not on PyPI yet, and
+it has run end to end on one real repository, with two accounts belonging to
+one person (see [limitations](docs/limitations.md)).
+
+- **Live example:** https://gobokobok.github.io/aidlc-kit/
+- **Docs:** [architecture](docs/architecture.md) · [workflow](docs/workflow.md) · [setup](docs/setup.md) · [trade-offs](docs/trade-offs.md) · [limitations](docs/limitations.md) · [demo script](docs/demo.md) · [decisions](docs/decisions.md)
 
 ## Set up a repository
 
+Three steps. Python 3.12 and the GitHub CLI are needed.
+
 ```bash
-pip install aidlc-kit            # not published yet; for now: pip install -e <path to this repo>
-aidlc init --assistant copilot   # or claude, cursor, agents, vscode; repeat for several
-gh auth login                    # once per person
+pip install git+https://github.com/gobokobok/aidlc-kit            # 1. install
+aidlc init --assistant claude --assistant vscode                    # 2. set up this repository
+gh auth login                                                       # 3. once per person
 ```
+
+`--assistant` can be `claude`, `copilot`, `cursor`, `agents` or `vscode`; repeat
+it for several. `init` writes `aidlc.yaml`, the CI workflows, `CODEOWNERS` and
+the files each assistant needs, and never overwrites your own content in shared
+files.
 
 | `--assistant` | What it writes |
 |---|---|
@@ -37,33 +39,29 @@ gh auth login                    # once per person
 | `agents` | AIDLC block in `AGENTS.md`, for any assistant that reads it |
 | `vscode` | AIDLC tasks in `.vscode/tasks.json`, for working with no assistant |
 
-Your own content in shared files is kept; only the marked AIDLC block is
-replaced when you run `init` again. `init` also writes the CI workflows and
-the AIDLC part of `.github/CODEOWNERS`.
+Then put your team in `aidlc.yaml` and protect `main`. Until the kit is on PyPI,
+tell CI where to install it from with `--install "pip install git+…@<tag>"`.
+All of it is in [docs/setup.md](docs/setup.md).
 
-Then, on GitHub, protect `main`: require a pull request with 1 approval and
-code owner review, require the checks `validate`, `eval` and `approvals_complete`,
-and let GitHub Actions bypass the pull request rule so the `audit` job can
-append to the audit log.
+## Try it: a five-minute demo
 
-## Live evals (optional)
+The repository contains a finished example, **FEAT-001 Guest request triage**:
+discovery, three requirements, two criteria, a prompt, a 20-case golden set with
+saved Claude answers, reviews including the risk reviewer, a handoff package and
+a technical plan ([PR 1](https://github.com/gobokobok/aidlc-kit/pull/1),
+[PR 2](https://github.com/gobokobok/aidlc-kit/pull/2)). To see it:
 
-CI runs evals from saved model answers only: no API key, no cost. To create
-those answers, someone runs `/eval --live` once per prompt change. Configure
-the provider in `aidlc.yaml` and install its SDK:
+1. Open the [viewer site](https://gobokobok.github.io/aidlc-kit/): the Tier 2
+   badge, the stage bar, who approved each item.
+2. Open **Trace** and **Evals** on the feature page.
+3. Clone the repository and run `aidlc status` and `aidlc reviewers`.
+4. Start a new feature and run `aidlc handoff` to see the gate refuse it and say
+   who can fix each thing.
 
-```yaml
-eval:
-  provider: anthropic          # or openai, openai_compatible (with base_url)
-  model: claude-opus-5-5
-  api_key_env: ANTHROPIC_API_KEY
-```
+The full script, with timings and commands, is [docs/demo.md](docs/demo.md). How
+the same feature changes at Tier 3 is in [docs/example-tier3.md](docs/example-tier3.md).
 
-```bash
-pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
-```
-
-## Commands so far
+## Commands
 
 | Chat command | CLI | What it does |
 |---|---|---|
@@ -83,16 +81,37 @@ pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
 | `/reject` | `aidlc reject ID --reason ...` | Reviewer: reject and say what must change |
 | `/reviewers` | `aidlc reviewers` | Who still has to approve what |
 | `/status` | `aidlc status` | Where the feature stands and what is next |
+| — | `aidlc validate` | Check every item; `--write` records computed stale statuses |
+| — | `aidlc site build` | Build the read-only viewer site |
+
+Every chat command is a thin wrapper over the `aidlc` command beside it, so a
+terminal or a VS Code task does the same thing. `aidlc --help` lists them all.
+
+## Live evals (optional)
+
+CI runs evals from saved model answers only: no API key, no cost. To create
+those answers, someone runs `/eval --live` once per prompt change. Configure
+the provider in `aidlc.yaml` and install its SDK:
+
+```yaml
+eval:
+  provider: anthropic          # or openai, openai_compatible (with base_url)
+  model: <model id>
+  api_key_env: ANTHROPIC_API_KEY
+```
+
+```bash
+pip install 'aidlc-kit[anthropic]'   # or 'aidlc-kit[openai]'
+```
 
 ## The viewer site
 
 `aidlc site build --out site` writes a read-only site: every feature with its
 risk tier badge and stage, who still has to approve each item (✓ approved, …
-waiting), what blocks handoff, the trace from discovery to tasks, eval
-results, and the audit timeline. It is plain HTML with light and dark mode and
-works on a phone; open `site/index.html`. The `AIDLC site` workflow publishes
-it to GitHub Pages after each merge to `main` (set Pages > Source to
-"GitHub Actions" once).
+waiting), what blocks handoff, the trace from discovery to tasks, eval results,
+and the audit timeline. It is plain HTML with light and dark mode and works on
+a phone. The `AIDLC site` workflow publishes it to GitHub Pages after each merge
+to `main` (set Pages > Source to "GitHub Actions" once).
 
 ## Development
 
@@ -103,5 +122,5 @@ python3.12 -m venv .venv
 .venv/bin/aidlc validate
 ```
 
-See [CLAUDE.md](CLAUDE.md) for the build spec (it is not shipped) and
-[docs/decisions.md](docs/decisions.md) for design decisions.
+[CLAUDE.md](CLAUDE.md) is the build spec used to build the kit; it is not part of
+the package. [docs/decisions.md](docs/decisions.md) logs the design decisions.
