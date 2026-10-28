@@ -4,7 +4,7 @@ type: handoff
 feature: FEAT-001
 title: 'Handoff: Guest request triage'
 version: 1
-status: in_review
+status: approved
 owner: gobokobok
 parents:
   - {id: RISK-001, version: 1}
@@ -16,7 +16,8 @@ parents:
   - {id: AC-002, version: 1}
   - {id: ASSET-001, version: 1}
   - {id: EVAL-001, version: 1}
-approvals: []
+approvals:
+  - {by: alexdanm-oss, version: 1, at: '2026-10-28T11:55:19Z'}
 updated_at: 2026-10-28T11:54:46Z
 tier: T2
 ---
