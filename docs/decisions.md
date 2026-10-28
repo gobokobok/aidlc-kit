@@ -455,4 +455,4 @@ Supersedes "Slash commands share one rules file" above.
   site (it is generated output).
 - **Fixed on the way:** `.gitignore` listed `site/`, which also hid
   `aidlc/site/`; it is now `/site/`.
-- **Not done:** the Pages deployment has not run on real GitHub (see below).
+- **Verified on GitHub:** Pages was enabled with source "GitHub Actions"; the `AIDLC site` workflow built and deployed after the push, and the live feature page matches the local build (https://gobokobok.github.io/aidlc-kit/).
