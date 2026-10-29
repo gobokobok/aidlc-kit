@@ -14,15 +14,16 @@ it has run end to end on one real repository, with two accounts belonging to
 one person (see [limitations](docs/limitations.md)).
 
 - **Live example:** https://gobokobok.github.io/aidlc-kit/
-- **Docs:** [architecture](docs/architecture.md) · [workflow](docs/workflow.md) · [setup](docs/setup.md) · [trade-offs](docs/trade-offs.md) · [limitations](docs/limitations.md) · [demo script](docs/demo.md) · [decisions](docs/decisions.md)
+- **Docs:** [overview](docs/overview.md) · [quickstart](docs/quickstart.md) · [testing guide](docs/testing-guide.md) · [architecture](docs/architecture.md) · [workflow](docs/workflow.md) · [setup](docs/setup.md) · [trade-offs](docs/trade-offs.md) · [limitations](docs/limitations.md) · [demo script](docs/demo.md) · [decisions](docs/decisions.md)
 
 ## Set up a repository
 
 Three steps. Python 3.12 and the GitHub CLI are needed.
 
 ```bash
-pip install git+https://github.com/gobokobok/aidlc-kit            # 1. install
-aidlc init --assistant claude --assistant vscode                    # 2. set up this repository
+pip install git+https://github.com/gobokobok/aidlc-kit@v0.1.0      # 1. install
+aidlc init --assistant claude --assistant vscode \
+  --install "pip install git+https://github.com/gobokobok/aidlc-kit@v0.1.0"   # 2. set up this repository
 gh auth login                                                       # 3. once per person
 ```
 
@@ -39,9 +40,9 @@ files.
 | `agents` | AIDLC block in `AGENTS.md`, for any assistant that reads it |
 | `vscode` | AIDLC tasks in `.vscode/tasks.json`, for working with no assistant |
 
-Then put your team in `aidlc.yaml` and protect `main`. Until the kit is on PyPI,
-tell CI where to install it from with `--install "pip install git+…@<tag>"`.
-All of it is in [docs/setup.md](docs/setup.md).
+Then put your team in `aidlc.yaml` and protect `main`. The kit is not on PyPI, so
+`--install` tells CI where to get it. Start with [docs/quickstart.md](docs/quickstart.md);
+the details are in [docs/setup.md](docs/setup.md).
 
 ## Try it: a five-minute demo
 
@@ -49,12 +50,14 @@ The repository contains a finished example, **FEAT-001 Guest request triage**:
 discovery, three requirements, two criteria, a prompt, a 20-case golden set with
 saved Claude answers, reviews including the risk reviewer, a handoff package and
 a technical plan ([PR 1](https://github.com/gobokobok/aidlc-kit/pull/1),
-[PR 2](https://github.com/gobokobok/aidlc-kit/pull/2)). To see it:
+[PR 2](https://github.com/gobokobok/aidlc-kit/pull/2)); a frozen copy is in
+[examples/guest-request-triage](examples/guest-request-triage). To see it:
 
 1. Open the [viewer site](https://gobokobok.github.io/aidlc-kit/): the Tier 2
    badge, the stage bar, who approved each item.
 2. Open **Trace** and **Evals** on the feature page.
-3. Clone the repository and run `aidlc status` and `aidlc reviewers`.
+3. Clone the repository and run `aidlc --root examples/guest-request-triage status`
+   and `… reviewers`.
 4. Start a new feature and run `aidlc handoff` to see the gate refuse it and say
    who can fix each thing.
 

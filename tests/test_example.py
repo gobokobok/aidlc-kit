@@ -14,24 +14,25 @@ from aidlc.evals import runner
 from aidlc.validate import validate_repo
 
 ROOT = Path(__file__).resolve().parents[1]
+EXAMPLE = ROOT / "examples" / "guest-request-triage"
 
 
 @pytest.fixture(scope="module")
 def example():
-    features = workspace.list_features(ROOT)
+    features = workspace.list_features(EXAMPLE)
     if not features:
-        pytest.skip("the worked example has not been recorded in this repository yet")
+        pytest.fail("the worked example snapshot is missing")
     feature = features[0]
-    return feature, workspace.artifacts_of(ROOT, feature)
+    return feature, workspace.artifacts_of(EXAMPLE, feature)
 
 
 def cli(*argv: str) -> tuple[int, str]:
     out = io.StringIO()
-    return main(["--root", str(ROOT), *argv], out=out, stdin=io.StringIO("")), out.getvalue()
+    return main(["--root", str(EXAMPLE), *argv], out=out, stdin=io.StringIO("")), out.getvalue()
 
 
 def test_example_validates_and_every_item_is_approved(example):
-    report = validate_repo(ROOT)
+    report = validate_repo(EXAMPLE)
     assert report.ok and not [i for i in report.issues if i.severity == "warning"]
     _, items = example
     assert {a.id for a in items} == {
@@ -42,7 +43,7 @@ def test_example_validates_and_every_item_is_approved(example):
 
 def test_example_is_tier_2_with_the_risk_reviewer_in_every_approval(example):
     feature, items = example
-    config, _ = load_config(ROOT)
+    config, _ = load_config(EXAMPLE)
     profile = next(a for a in items if a.type == "risk")
     tier = risk.effective_tier(profile, config)
     assert tier.name == "T2" and "risk_reviewer" in tier.extra_reviewers
@@ -81,22 +82,18 @@ def test_example_handoff_package_is_intact_and_decomposition_is_clean(example):
 
 def test_example_audit_log_covers_every_item(example):
     _, items = example
-    entries = audit.read_entries(ROOT)
+    entries = audit.read_entries(EXAMPLE)
     assert {e["id"] for e in entries} == {a.id for a in items}
     assert {e["tier"] for e in entries} == {"T2"}
     assert all("risk_reviewer" in e["roles_satisfied"] for e in entries)
-    assert audit.check_log(None, (ROOT / audit.LOG).read_text()) == []
-
-
-def test_example_codeowners_match_the_config():
-    assert cli("sync-codeowners", "--check")[0] == 0
+    assert audit.check_log(None, (EXAMPLE / audit.LOG).read_text()) == []
 
 
 # --- docs/example-tier3.md ---------------------------------------------------
 
 def test_tier3_page_matches_the_rules():
     page = (ROOT / "docs" / "example-tier3.md").read_text()
-    config, _ = load_config(ROOT)
+    config, _ = load_config(EXAMPLE)
     t2, t3 = config.tier("T2"), config.tier("T3")
     before = risk.Answers(("personal",), "suggest", "customer_facing", False)
     after = risk.Answers(("personal",), "act_autonomously", "customer_facing", False)

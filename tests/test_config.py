@@ -9,8 +9,8 @@ from conftest import CONFIG_YAML
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_repo_config_is_valid():
-    cfg, issues = load_config(ROOT)
+def test_shipped_config_is_valid():
+    cfg, issues = parse_config((ROOT / "aidlc" / "assistants" / "aidlc.yaml").read_text())
     assert issues == []
     assert cfg.tier("T2").extra_reviewers == ("risk_reviewer",)
 

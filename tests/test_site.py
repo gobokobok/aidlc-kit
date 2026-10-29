@@ -13,9 +13,10 @@ from aidlc.site import build as site_build
 from aidlc.site.graph import layout
 from aidlc.site.model import build_site
 
-from conftest import T1, approved_chain, make
+from conftest import T1, approved_chain
 
 ROOT = Path(__file__).resolve().parents[1]
+EXAMPLE = ROOT / "examples" / "guest-request-triage"
 
 
 def pages(root: Path, tags=(), url=None) -> dict[str, str]:
@@ -141,7 +142,7 @@ def test_cli_builds_the_site_into_a_folder(repo, tmp_path):
 
 @pytest.fixture(scope="module")
 def example_pages():
-    return pages(ROOT, tags=["FEAT-001/handoff-v1"], url="https://github.com/gobokobok/aidlc-kit")
+    return pages(EXAMPLE, tags=["FEAT-001/handoff-v1"], url="https://github.com/gobokobok/aidlc-kit")
 
 
 def test_example_appears_on_the_site(example_pages):

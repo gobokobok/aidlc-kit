@@ -218,6 +218,24 @@ class GitOps:
     def switch(self, branch: str) -> None:
         self._git("switch", "--quiet", branch, what=f"open {branch}")
 
+    def remote_branch_exists(self, name: str) -> bool:
+        if not self.has_remote():
+            return False
+        out = self._call(["git", "ls-remote", "--heads", REMOTE, name], "", check=False).stdout
+        return bool(out.strip())
+
+    def bring_in_branch(self, name: str) -> bool:
+        """Open a branch that only exists on GitHub (a reviewer's clone starts
+        on main). False when there is no such branch."""
+        if self.branch_exists(name):
+            self.switch(name)
+            return True
+        if not self.remote_branch_exists(name):
+            return False
+        self._git("fetch", "--quiet", REMOTE, name, what=f"fetch {name}")
+        self._git("switch", "--quiet", "-c", name, "--track", f"{REMOTE}/{name}", what=f"open {name}")
+        return True
+
     def create_branch(self, branch: str, base: str = MAIN_BRANCH) -> None:
         self._git("switch", "--quiet", "-c", branch, base, what=f"create {branch}")
 

@@ -6,6 +6,9 @@ argument_hint: <item IDs, or empty for everything waiting for you>
 
 The reviewer wants to approve: {{ args }}
 
+0. If several features are open for review, or the reviewer names one (such as
+   FEAT-002), add `--feature FEAT-002` to every command below. The tool opens
+   the feature's review branch itself; never run `git` for the reviewer.
 1. Run `aidlc reviewers` to see what is waiting for them and which role they
    review as.
 2. Read each item they are about to approve (its file under `features/`) and,

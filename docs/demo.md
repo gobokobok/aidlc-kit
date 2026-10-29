@@ -47,8 +47,8 @@ in the history if asked: the prompt was fixed, not the test cases.
 **3:15. The same facts from the terminal.**
 
 ```bash
-.venv/bin/aidlc status
-.venv/bin/aidlc reviewers
+.venv/bin/aidlc --root examples/guest-request-triage status
+.venv/bin/aidlc --root examples/guest-request-triage reviewers
 ```
 
 `status` lists every item with its version and status and ends with "Handed off
@@ -73,7 +73,7 @@ engineering until everything is approved, up to date and the evals pass."
 **4:30. What GitHub shows.** Open pull request 1. "The reviews are real GitHub
 reviews, and the `approvals_complete` check confirmed each approval with
 GitHub rather than trusting the file. Merges go through branch protection."
-Open `audit/log.jsonl` in the repository: "One line per item when it reached
+Open `examples/guest-request-triage/audit/log.jsonl`: "One line per item when it reached
 `main`: who, which version, which approvers, which roles, which commit."
 
 **4:50. Close.** "Any assistant, or none; one command-line tool holds the

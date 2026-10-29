@@ -456,3 +456,42 @@ Supersedes "Slash commands share one rules file" above.
 - **Fixed on the way:** `.gitignore` listed `site/`, which also hid
   `aidlc/site/`; it is now `/site/`.
 - **Verified on GitHub:** Pages was enabled with source "GitHub Actions"; the `AIDLC site` workflow built and deployed after the push, and the live feature page matches the local build (https://gobokobok.github.io/aidlc-kit/).
+
+## 2026-10-29: Split the product from the live test run
+
+- **Decision:** this repository is the product only: package, templates,
+  docs, tests, `LICENSE` (MIT), tag `v0.1.0`. The live run of FEAT-001 (made on
+  this repository, pull requests 1 and 2) is kept as a frozen snapshot in
+  `examples/guest-request-triage/`, laid out like an adopting repository so the
+  kit can be pointed at it with `--root`. The kit's own CI is only the tests
+  workflow; the validate, eval, approvals, audit and site workflows, the
+  generated `CODEOWNERS`, the personal `aidlc.yaml` and the audit deploy key
+  belong in an adopting repository, not in the product.
+- **Decision:** a second repository, `aidlc-demo`, is set up the way a company
+  would (install from the tag, `aidlc init`) and runs the example live. It
+  also tests the adoption path, which has not been tried on real GitHub.
+- **Rejected:** one repository doing both jobs (a fork inherits real names,
+  live audit history and secrets-shaped setup, and the kit's tests depended on
+  a live example); rewriting history (the history is already public and
+  records how the kit was built).
+- **Consequence:** the commit and pull-request numbers in the snapshot's audit
+  log and manifest point at this repository's history, as the snapshot's README
+  says. The old Pages site stays up, at its last build, until the demo
+  repository publishes its own.
+
+## 2026-10-29: A reviewer's clone opens the review branch itself
+
+- **Found while writing the test guide:** a reviewer who clones the repository
+  sits on `main`, where an unmerged feature does not exist, so `/approve` said
+  "There is no feature yet". Every reviewer on another machine would have needed
+  `git fetch` and `git switch`, against the rule that people never type Git.
+- **Decision:** when a feature is named (`--feature FEAT-001`) and is not in the
+  working folder, or no feature is there and exactly one review branch is open,
+  the kit fetches `feat/FEAT-001` from GitHub and opens it. With several open
+  features and none named it stops and lists them. The assistants' approve
+  command passes `--feature` when several are open.
+- **Not changed:** with one feature already on `main` (for example one handed
+  off) and a second open on GitHub, a command that names no feature still acts
+  on the one on `main`. Name the feature with `--feature`.
+- **Verified:** with a second clone of a real Git remote and a fake GitHub
+  (tests), not yet with two real machines.

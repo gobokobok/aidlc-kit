@@ -96,8 +96,9 @@ aidlc/                      # Python package (what ships)
   site/build.py             # static viewer generator
   templates/                # artifact templates (markdown + frontmatter),
                             #   incl. risk.md and privacy_assessment.md
-features/FEAT-001-guest-request-triage/   # worked example
-audit/log.jsonl             # append-only, written only by CI on merge
+examples/guest-request-triage/   # worked example (frozen copy of a real run):
+                            #   aidlc.yaml, features/, audit/log.jsonl (append-only,
+                            #   written only by CI on merge in an adopting repo)
 site/                       # generated, not committed
 docs/                       # architecture, workflow, trade-offs, limitations
 tests/

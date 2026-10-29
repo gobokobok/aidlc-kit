@@ -9,7 +9,8 @@ from aidlc.cli import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = sorted([ROOT / "README.md", *(ROOT / "docs").glob("*.md")])
-REQUIRED = ("architecture", "workflow", "setup", "trade-offs", "limitations", "demo", "decisions", "example-tier3")
+REQUIRED = ("overview", "quickstart", "testing-guide", "architecture", "workflow", "setup", "trade-offs",
+            "limitations", "demo", "decisions", "example-tier3")
 
 
 def commands() -> set[str]:

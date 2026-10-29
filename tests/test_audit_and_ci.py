@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pytest
 
@@ -9,8 +8,6 @@ from aidlc.reviewers import codeowners
 from aidlc.validate import load_feature
 
 from conftest import CONFIG_YAML, T1, approved_chain, config, make
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def line(**over):
@@ -101,14 +98,6 @@ def test_codeowners_block_keeps_company_lines():
     once = blocks.upsert(theirs, codeowners(config()), blocks.HASH_MARKERS)
     assert once.startswith(theirs)
     assert blocks.extract(once, blocks.HASH_MARKERS) == codeowners(config()).strip()
-
-
-def test_kit_repo_ci_and_codeowners_are_in_sync():
-    """The kit's own CI is what `aidlc sync-ci --install 'pip install -e .'` writes."""
-    cfg, _ = parse_config((ROOT / "aidlc.yaml").read_text())
-    for rel, content in ci.workflows("pip install -e .").items():
-        assert (ROOT / rel).read_text() == content, rel
-    assert blocks.extract((ROOT / ci.CODEOWNERS_PATH).read_text(), blocks.HASH_MARKERS) == codeowners(cfg).strip()
 
 
 # --- workflows -------------------------------------------------------------

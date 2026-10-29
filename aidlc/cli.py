@@ -68,9 +68,20 @@ def prepare(ctx: Ctx, feature_id: str | None = None) -> None:
     ctx.ops.pull_rebase()
 
 
+def bring_in_feature(ctx: Ctx, feature_id: str) -> bool:
+    """A reviewer's clone is on main, where an unmerged feature does not exist
+    yet: open its branch from GitHub."""
+    return ctx.ops.is_repo() and ctx.ops.bring_in_branch(feature_branch(feature_id))
+
+
 def resolve_feature(ctx: Ctx, explicit: str | None) -> Feature:
     if explicit:
-        return workspace.get_feature(ctx.root, explicit)
+        try:
+            return workspace.get_feature(ctx.root, explicit)
+        except WorkspaceError:
+            if bring_in_feature(ctx, explicit):
+                return workspace.get_feature(ctx.root, explicit)
+            raise
     branch = ctx.ops.current_branch() if ctx.ops.is_repo() else ""
     if feature_of_branch(branch):
         return workspace.get_feature(ctx.root, feature_of_branch(branch))
@@ -78,6 +89,13 @@ def resolve_feature(ctx: Ctx, explicit: str | None) -> Feature:
     if len(features) == 1:
         return features[0]
     if not features:
+        open_ids = sorted({feature_of_branch(b) for b in ctx.ops.feature_branches()} - {None}) \
+            if ctx.ops.is_repo() else []
+        if len(open_ids) == 1 and bring_in_feature(ctx, open_ids[0]):
+            return workspace.get_feature(ctx.root, open_ids[0])
+        if len(open_ids) > 1:
+            raise WorkspaceError(f"Several features are open: {', '.join(open_ids)}. "
+                                 "Name the one you mean with --feature.")
         raise WorkspaceError("There is no feature yet. Start one with /new-feature.")
     names = ", ".join(f"{f.id} ({f.title})" for f in features)
     raise WorkspaceError(f"Which feature do you mean? Name one with --feature: {names}.")

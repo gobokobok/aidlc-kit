@@ -16,11 +16,11 @@ Done once per repository by whoever sets it up (a few minutes), plus one
 The package is not on PyPI yet. Install it from GitHub:
 
 ```bash
-pip install git+https://github.com/gobokobok/aidlc-kit
+pip install git+https://github.com/gobokobok/aidlc-kit@v0.1.0
 ```
 
 For live evals, add the extra for your provider: `pip install 'aidlc-kit[anthropic]'`
-or `'aidlc-kit[openai]'` (with the same `git+` address in front for now).
+or `'aidlc-kit[openai]'` (for now written as `'aidlc-kit[anthropic] @ git+https://github.com/gobokobok/aidlc-kit@v0.1.0'`).
 
 ## 2. Set up the repository
 
@@ -40,7 +40,7 @@ Until the kit is on PyPI, tell CI how to install it, or the workflows will
 fail on `pip install aidlc-kit==0.1.0`:
 
 ```bash
-aidlc init --assistant claude --install "pip install git+https://github.com/gobokobok/aidlc-kit@<commit or tag>"
+aidlc init --assistant claude --install "pip install 'aidlc-kit[anthropic] @ git+https://github.com/gobokobok/aidlc-kit@v0.1.0'"
 ```
 
 Pin to a commit or tag so a later change to the kit cannot change your CI.

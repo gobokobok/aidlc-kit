@@ -7,6 +7,8 @@ name = "aidlc-kit"
 version = "0.1.0"
 description = "Plain-language AI development lifecycle for Product Managers, backed by Git."
 requires-python = ">=3.12"
+license = {text = "MIT"}
+readme = "README.md"
 dependencies = ["PyYAML>=6.0", "Jinja2>=3.1"]
 
 [project.optional-dependencies]

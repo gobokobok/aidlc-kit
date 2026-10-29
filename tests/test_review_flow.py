@@ -112,3 +112,65 @@ def test_owner_cannot_approve_own_work(env):
     code, out = env("approve", "REQ-001")
     assert code == 1
     assert "Skipped REQ-001: you wrote it, so someone else has to review it." in out
+
+
+def reviewer_clone(env, tmp_path):
+    """A second person's checkout: a fresh clone of the remote, sitting on main."""
+    import io
+
+    from aidlc.cli import main
+    from aidlc.gitops import GitOps
+    from conftest import T1
+
+    clone = tmp_path / "reviewer"
+    git(tmp_path, "clone", "-q", str(env.remote), str(clone))
+
+    def run(user, *argv):
+        env.gh.user = user
+        out = io.StringIO()
+        code = main(["--root", str(clone), *argv], ops_factory=lambda r: GitOps(r, env.gh), now=T1,
+                    out=out, stdin=io.StringIO(""))
+        return code, out.getvalue()
+
+    run.clone = clone
+    return run
+
+
+def test_reviewer_on_a_fresh_clone_can_approve_without_git(env, tmp_path):
+    submit_feature(env)
+    reviewer = reviewer_clone(env, tmp_path)
+    assert git(reviewer.clone, "branch", "--show-current").strip() == "main"
+    assert not list(reviewer.clone.glob("features/*"))            # the feature is not on main yet
+
+    code, out = reviewer("bob", "approve")                         # no feature named: one is open
+    assert code == 0, out
+    assert out.startswith("Approved REQ-001 v1 as Ops; AC-001 v1 as Ops.")
+    assert git(reviewer.clone, "branch", "--show-current").strip() == "feat/FEAT-001"
+    assert any(c[1:4] == ["pr", "review", "1"] and "--approve" in c for c in env.gh.calls)
+    # The approval was pushed to the feature branch for the PM to pick up.
+    assert "Approved by bob" in git(env.remote, "log", "feat/FEAT-001", "-1", "--format=%s")
+
+
+def test_naming_a_feature_brings_in_its_branch(env, tmp_path):
+    submit_feature(env)
+    reviewer = reviewer_clone(env, tmp_path)
+    code, out = reviewer("priya", "reviewers", "--feature", "FEAT-001")
+    assert code == 0, out
+    assert "FEAT-001 Guest request triage" in out and "REQ-001" in out
+
+
+def test_unknown_feature_is_explained(env, tmp_path):
+    submit_feature(env)
+    reviewer = reviewer_clone(env, tmp_path)
+    code, out = reviewer("bob", "approve", "--feature", "FEAT-009")
+    assert code == 1 and "There is no feature FEAT-009 here." in out
+
+
+def test_several_open_features_must_be_named(env, tmp_path):
+    submit_feature(env)
+    env("new-feature", "--title", "Second one", "--data-classes", "internal", "--autonomy", "suggest",
+        "--audience", "internal", "--regulated-decision", "no")
+    git(env.repo, "push", "-q", "-u", "origin", "feat/FEAT-002")
+    reviewer = reviewer_clone(env, tmp_path)
+    code, out = reviewer("bob", "approve")
+    assert code == 1 and "Several features are open: FEAT-001, FEAT-002. Name the one you mean with --feature." in out
