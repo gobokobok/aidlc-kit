@@ -500,3 +500,17 @@ Supersedes "Slash commands share one rules file" above.
   `tests` check (admins may bypass); the audit deploy key and the
   `AIDLC_AUDIT_KEY` secret are deleted; the test tag `FEAT-001/handoff-v1` is
   deleted from the remote. The only tag is `v0.1.0`.
+
+## 2026-10-29: The deployed URL is the viewer, built from the example
+
+- **Decision:** the kit repository publishes the viewer site from the frozen
+  example (`.github/workflows/pages.yml`, not shipped), so the deployed URL
+  always matches the repository and shows a real run. This replaces the leftover
+  build from before the split, which nothing rebuilt and whose file links pointed
+  at paths that had moved.
+- **Decision:** `aidlc site build` gained `--source-subdir` (links point into a
+  folder of the repository) and `--tags-file` (handoff tags for a copy that has
+  none), and a generic About page that names no example and no company.
+- **Not deployed:** the PM's work happens in the IDE, so the deployed
+  application is a read-only view, not a hosted editor. A hosted editor would
+  contradict the design (the repository is the store, the CLI holds the rules).

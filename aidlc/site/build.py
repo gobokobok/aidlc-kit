@@ -29,6 +29,7 @@ def render(site: Site) -> dict[str, str]:
 
     page("index.html", "index.html", section="features")
     page("audit.html", "audit.html", section="audit")
+    page("about.html", "about.html", section="about")
     for f in site.features:
         base = f"features/{f.id}"
         page(f"{base}/index.html", "feature.html", section="features", f=f)
@@ -49,8 +50,8 @@ def write(out: Path, pages: dict[str, str]) -> None:
 
 
 def build(root: Path, out: Path, tags: list[str], now: datetime, commit: str | None = None,
-          source_url: str | None = None) -> list[str]:
+          source_url: str | None = None, source_subdir: str = "") -> list[str]:
     """Build the site into `out`; returns the files written."""
-    pages = render(build_site(root, tags, now, commit, source_url))
+    pages = render(build_site(root, tags, now, commit, source_url, source_subdir))
     write(out, pages)
     return sorted([*pages, "style.css"])

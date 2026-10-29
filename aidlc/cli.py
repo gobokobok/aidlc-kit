@@ -1016,11 +1016,14 @@ def cmd_sync_ci(ctx: Ctx, args: argparse.Namespace) -> int:
 
 def cmd_site_build(ctx: Ctx, args: argparse.Namespace) -> int:
     in_git = ctx.ops.is_repo()
-    tags = ctx.ops.tags("*/handoff-v*") if in_git else []
+    if args.tags_file:
+        tags = [t.strip() for t in Path(args.tags_file).read_text(encoding="utf-8").splitlines() if t.strip()]
+    else:
+        tags = ctx.ops.tags("*/handoff-v*") if in_git else []
     commit = ctx.ops.head_sha() if in_git else None
     out = Path(args.out)
     out = out if out.is_absolute() else ctx.root / out
-    files = site_build.build(ctx.root, out, tags, ctx.now, commit, args.source_url)
+    files = site_build.build(ctx.root, out, tags, ctx.now, commit, args.source_url, args.source_subdir or "")
     ctx.say(f"Built the viewer site: {len(files)} files in {args.out}. Open {args.out}/index.html to look at it.")
     return 0
 
@@ -1226,6 +1229,8 @@ def build_parser() -> argparse.ArgumentParser:
     q = site_sub.add_parser("build", help="write the static pages")
     q.add_argument("--out", default="site", help="folder to write (default: site)")
     q.add_argument("--source-url", help="repository address, e.g. https://github.com/acme/repo, to link items")
+    q.add_argument("--source-subdir", help="folder of the repository this site is built from, for links (default: the root)")
+    q.add_argument("--tags-file", help="file listing handoff tags (one per line), for a copy that has no Git tags")
     q.set_defaults(func=cmd_site_build)
 
     p = sub.add_parser("approvals-check", help="CI: every required role approved (approvals_complete)")

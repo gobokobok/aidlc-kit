@@ -159,14 +159,14 @@ def relative(a: Artifact, root: Path) -> str:
     return a.path.relative_to(root).as_posix() if a.path else ""
 
 
-def artifact_view(a: Artifact, config: Config, tier: Tier | None, root: Path) -> ArtifactView:
+def artifact_view(a: Artifact, config: Config, tier: Tier | None, root: Path, prefix: str = "") -> ArtifactView:
     rejection = next((r for r in reversed(a.extra.get("rejections", [])) if r.get("version") == a.version), None)
     return ArtifactView(
         id=a.id, type=a.type, type_label=TYPE_LABELS.get(a.type, a.type), title=a.title, version=a.version,
         status=a.status, owner=a.owner, updated=stamp(a.updated_at),
         approvals=tuple((ap.by, stamp(ap.at)) for ap in a.approved_current),
         roles=role_views(config, a, tier),
-        path=relative(a, root),
+        path=prefix + relative(a, root) if a.path else "",
         note=f"rejected by {rejection['by']}: {rejection['reason']}" if rejection else "")
 
 
@@ -187,7 +187,8 @@ def risk_facts(items: list[Artifact]) -> tuple[tuple[str, str], ...]:
 
 
 def feature_view(root: Path, config: Config, feature: workspace.Feature, items: list[Artifact],
-                 tags: list[str], entries: list[dict[str, Any]], problems: list[str]) -> FeatureView:
+                 tags: list[str], entries: list[dict[str, Any]], problems: list[str],
+                 prefix: str = "") -> FeatureView:
     from aidlc.site.graph import layout
 
     items = sorted(items, key=workspace.sort_key)
@@ -211,7 +212,7 @@ def feature_view(root: Path, config: Config, feature: workspace.Feature, items: 
         blockers=tuple(blockers),
         next_step=handoff.next_step(config, items, handed) or workspace.next_step(items, tier, config, eval_state),
         handed_off=tuple(sorted(handed)),
-        artifacts=tuple(artifact_view(a, config, tier, root) for a in items),
+        artifacts=tuple(artifact_view(a, config, tier, root, prefix) for a in items),
         risk_facts=risk_facts(items),
         eval_state=eval_state, eval_text=EVAL_WORDS[eval_state],
         report=runner.read_report(evals_dir),
@@ -224,17 +225,18 @@ def feature_view(root: Path, config: Config, feature: workspace.Feature, items: 
 
 
 def build_site(root: Path, tags: list[str], now: datetime, commit: str | None = None,
-               source_url: str | None = None) -> Site:
+               source_url: str | None = None, source_subdir: str = "") -> Site:
     config, _ = load_config(root)
     report = validate_repo(root)
     entries = audit.read_entries(root)
+    prefix = source_subdir.strip("/") + "/" if source_subdir.strip("/") else ""
     views = []
     for feature in workspace.list_features(root):
         items = [a for a in report.artifacts if a.feature == feature.id]
         problems = [f"{i.where}: {i.message}" for i in report.issues
                     if i.severity == "error" and (i.where.startswith(f"features/{feature.path.name}")
                                                   or i.where.startswith(feature.id))]
-        views.append(feature_view(root, config, feature, items, tags, entries, problems))
+        views.append(feature_view(root, config, feature, items, tags, entries, problems, prefix))
     return Site(
         name=config.display_name, generated_at=stamp(now), commit=commit, source_url=source_url,
         features=tuple(views),

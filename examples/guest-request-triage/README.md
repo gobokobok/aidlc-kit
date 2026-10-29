@@ -14,6 +14,8 @@ aidlc --root examples/guest-request-triage site build --out /tmp/site
   discovery, requirements, criteria, prompt, golden set with saved Claude
   answers, handoff package and technical plan.
 - `audit/log.jsonl`: what CI recorded when the pull requests merged.
+- `tags.txt`: the handoff tag the original run created (`FEAT-001/handoff-v1`). A
+  copy has no Git tags, so the site reads handoff state from this file.
 - `drafts/`: the plain-language drafts a PM typed in, for reuse.
 - The commit and pull-request numbers in the audit log and manifest refer to
   the run's original repository, `gobokobok/aidlc-kit` (pull requests 1 and 2).

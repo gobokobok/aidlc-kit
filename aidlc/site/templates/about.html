@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}About · {{ site.name }}{% endblock %}
+{% block body %}
+<h1>About this site</h1>
+<p class="sub">A read-only view of work done with AIDLC Kit.</p>
+
+<h2>What the kit does</h2>
+<p>Product Managers take an AI feature from discovery and requirements through
+acceptance criteria, the AI prompt, evaluation and an engineering handoff, from
+their IDE and in plain language, with no Git branches, commits or merge requests
+to handle. Underneath, every item is versioned and owned, the right people
+approve it, the AI is tested against agreed cases, and the history is kept.</p>
+
+<h2>What you are looking at</h2>
+<p>This site is generated from the repository after each merge to <span class="mono">main</span>:
+nothing is typed into it, and it shows only what has been merged.
+{% if site.features %}It currently shows
+{% for f in site.features %}<a href="{{ root }}features/{{ f.id }}/index.html">{{ f.id }} {{ f.title }}</a>{{ ', ' if not loop.last else '.' }}{% endfor %}
+{% endif %}</p>
+<div class="card"><div class="t">Features</div><div class="meta">Stage, risk tier, what blocks handoff, and who still has to approve what.</div></div>
+<div class="card"><div class="t">Trace</div><div class="meta">From the discovery brief to requirements, criteria, the prompt, the golden set and engineering tasks.</div></div>
+<div class="card"><div class="t">Evals</div><div class="meta">Each acceptance threshold against what the model scored, with failing cases.</div></div>
+<div class="card"><div class="t">Audit</div><div class="meta">One line each time an item reached main: who, which version, which approvers.</div></div>
+
+<h2>How to read it</h2>
+<p><a href="{{ root }}index.html">Start with the features overview</a>, open the feature,
+then its Trace and Evals tabs. ✓ means approved for the current version, … means still waiting.</p>
+
+{% if site.source_url %}
+<h2>The repository</h2>
+<div class="card"><div class="t"><a href="{{ site.source_url }}">{{ site.source_url }}</a></div><div class="meta">Every item on this site is a file there, with its full history.</div></div>
+{% endif %}
+{% endblock %}

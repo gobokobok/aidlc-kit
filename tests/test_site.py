@@ -26,7 +26,7 @@ def pages(root: Path, tags=(), url=None) -> dict[str, str]:
 def test_pages_exist_for_each_feature(repo):
     root = repo(*approved_chain())
     assert set(pages(root)) == {
-        "index.html", "audit.html", "features/FEAT-001/index.html", "features/FEAT-001/trace.html",
+        "index.html", "audit.html", "about.html", "features/FEAT-001/index.html", "features/FEAT-001/trace.html",
         "features/FEAT-001/evals.html"}
 
 
@@ -126,14 +126,14 @@ def test_eval_page_without_a_report_says_what_to_do(repo):
 def test_empty_repository_builds(tmp_path):
     (tmp_path / "aidlc.yaml").write_text("display_name: Empty\n")
     html = pages(tmp_path)
-    assert set(html) == {"index.html", "audit.html"} and "No features yet" in html["index.html"]
+    assert set(html) == {"index.html", "audit.html", "about.html"} and "No features yet" in html["index.html"]
 
 
 def test_cli_builds_the_site_into_a_folder(repo, tmp_path):
     root = repo(*approved_chain())
     out = io.StringIO()
     assert main(["--root", str(root), "site", "build", "--out", "viewer"], now=T1, out=out) == 0
-    assert out.getvalue().startswith("Built the viewer site: 6 files in viewer.")
+    assert out.getvalue().startswith("Built the viewer site: 7 files in viewer.")
     assert (root / "viewer" / "index.html").is_file() and (root / "viewer" / "style.css").is_file()
     assert (root / "viewer" / ".nojekyll").is_file()
 
@@ -155,3 +155,27 @@ def test_example_appears_on_the_site(example_pages):
     assert "AC-001 builds on REQ-001" in example_pages["features/FEAT-001/trace.html"]
     assert "T-005 builds on AC-002" in example_pages["features/FEAT-001/trace.html"]
     assert "approved by alexdanm-oss" in example_pages["audit.html"]
+
+
+def test_about_page_is_generic_and_links_only_what_it_knows(repo):
+    root = repo(*approved_chain())
+    plain = pages(root)["about.html"]
+    assert "About this site" in plain and "FEAT-001" in plain and "The repository" not in plain
+    linked = pages(root, url="https://github.com/acme/kit")["about.html"]
+    assert 'href="https://github.com/acme/kit"' in linked
+    assert "gobokobok" not in linked and "/pull/" not in linked        # no kit-specific text in the shipped page
+    assert 'aria-current="page">About' in linked
+
+
+def test_links_point_into_a_subfolder_and_tags_can_come_from_a_file(repo, tmp_path):
+    root = repo(*approved_chain())
+    site = build_site(root, ["FEAT-001/handoff-v1"], T1, None, "https://github.com/acme/kit", "examples/demo/")
+    html = site_build.render(site)["features/FEAT-001/index.html"]
+    assert "blob/main/examples/demo/features/FEAT-001-guest-triage/requirements/REQ-001.md" in html
+    tags = tmp_path / "tags.txt"
+    tags.write_text("FEAT-001/handoff-v1\n\n")
+    out = io.StringIO()
+    code = main(["--root", str(root), "site", "build", "--out", "viewer", "--tags-file", str(tags),
+                 "--source-subdir", "examples/demo"], now=T1, out=out)
+    assert code == 0
+    assert "Handed off as HND-001" in (root / "viewer/features/FEAT-001/index.html").read_text()

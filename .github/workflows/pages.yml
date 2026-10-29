@@ -1,0 +1,42 @@
+# The kit's own site: the viewer built from the frozen worked example, so the
+# deployed URL always shows a real run of the kit. (An adopting repository gets
+# `aidlc-site.yml` from `aidlc init` instead.) Pages > Source must be "GitHub Actions".
+name: Site
+on:
+  push:
+    branches: [main]
+    paths: ["examples/**", "aidlc/site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy-site:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Build the viewer from the example
+        run: >
+          aidlc --root examples/guest-request-triage site build
+          --out "$GITHUB_WORKSPACE/site"
+          --source-url "${{ github.server_url }}/${{ github.repository }}"
+          --source-subdir examples/guest-request-triage
+          --tags-file examples/guest-request-triage/tags.txt
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
