@@ -495,3 +495,8 @@ Supersedes "Slash commands share one rules file" above.
   on the one on `main`. Name the feature with `--feature`.
 - **Verified:** with a second clone of a real Git remote and a fake GitHub
   (tests), not yet with two real machines.
+
+- **Done on 2026-10-29:** the ruleset on this repository now requires only the
+  `tests` check (admins may bypass); the audit deploy key and the
+  `AIDLC_AUDIT_KEY` secret are deleted; the test tag `FEAT-001/handoff-v1` is
+  deleted from the remote. The only tag is `v0.1.0`.
