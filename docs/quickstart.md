@@ -14,7 +14,7 @@ rights on a new empty GitHub repository, and the GitHub usernames of your team.
    pipx install "aidlc-kit[anthropic] @ git+https://github.com/gobokobok/aidlc-kit@v0.1.0"
    aidlc --help
    ```
-   Use `[openai]` instead of `[anthropic]` for OpenAI, Azure or a local model;
+   (No pipx? `python3.12 -m pip install --user pipx`.) Use `[openai]` instead of `[anthropic]` for OpenAI, Azure or a local model;
    drop the extra if nobody records eval answers.
 
 3. **Set up the repository** for the assistants your team uses
